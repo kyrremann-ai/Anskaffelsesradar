@@ -160,8 +160,20 @@ def run(con, demo: bool | None = None) -> None:
         _log(f"Feil: {e}")
         traceback.print_exc()
     finally:
+        _record_run(con)
         status["running"] = False
         _lock.release()
+
+
+def _record_run(con) -> None:
+    """Kjøreloggen i databasen: de siste 60 kjøringene med kilder som feilet. Overlever omstart, i motsetning til status["log"]."""
+    try:
+        failed = [k for k, v in (db.get_meta(con, "sources") or {}).items() if v.get("status") == "feil"]
+        run = {"at": db.now(), "ok": status["error"] is None and not failed, "error": status["error"], "failed": failed}
+        with db.tx(con):
+            db.set_meta(con, "runs", ((db.get_meta(con, "runs") or []) + [run])[-60:])
+    except Exception as e:  # noqa: BLE001
+        print(f"Kunne ikke lagre kjøreloggen: {e}", flush=True)
 
 
 def run_in_background(con, demo: bool | None = None) -> bool:

@@ -1,5 +1,8 @@
 # Nattlig oppdatering av radar.vikingsea.no: henter TED/Doffin/Brreg, scorer, bygger og publiserer til Cloudflare Pages.
-# Hemmeligheter: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DOFFIN_API_KEY (valgfri).
+# Publiserer til hver kunde i deploy/kunder.json, tar sikkerhetskopi av sakene og prøver å gjenopprette den.
+# Jobben blir rød (og GitHub sender e-post) når en kilde feiler, data er gamle, eller backup/gjenoppretting feiler.
+# Hemmeligheter: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DOFFIN_API_KEY (valgfri),
+#   BACKUP_PASSPHRASE (krypterer sikkerhetskopien som lagres i GitHub, utenfor Cloudflare).
 name: Radar på Cloudflare
 on:
   schedule:
@@ -51,7 +54,41 @@ jobs:
           fi
           ls -la backend/data/import/bemanning.json
       - run: deploy/build_pages.sh pages-out
-      - name: Publiser
+      - name: Publiser, sikkerhetskopi og gjenopprettingstest
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::warning::CLOUDFLARE_API_TOKEN mangler, hopper over publisering"; exit 0; fi
-          python deploy/cf_radar.py deploy pages-out
+          mkdir -p backup
+          fail=0
+          for k in $(python -c "import json;print(' '.join(k for k in json.load(open('deploy/kunder.json')) if not k.startswith('_')))"); do
+            echo "::group::$k"
+            RADAR_KUNDE=$k python deploy/cf_radar.py deploy pages-out || { echo "::error::Publisering feilet for $k"; fail=1; }
+            if RADAR_KUNDE=$k python deploy/cf_radar.py backup backup; then
+              RADAR_KUNDE=$k python deploy/cf_radar.py restore-test backup || { echo "::error::Gjenoppretting feilet for $k"; fail=1; }
+            else
+              echo "::error::Sikkerhetskopi feilet for $k"; fail=1
+            fi
+            echo "::endgroup::"
+          done
+          # Kopien inneholder notater og navn, så den lagres bare kryptert
+          if [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::BACKUP_PASSPHRASE mangler, så sikkerhetskopien lagres ikke utenfor Cloudflare"; fail=1
+          else
+            for f in backup/*.sql; do
+              gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$BACKUP_PASSPHRASE" -o "$f.gpg" "$f"
+            done
+          fi
+          rm -f backup/*.sql
+          exit $fail
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && !inputs.demo && hashFiles('backup/*.gpg') != '' }}
+        with:
+          name: saker-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 90
+      # Varsling: kilder som feilet, gamle data eller ingen nye kunngjøringer gjør jobben rød
+      - name: Sjekk kilder og alder på data
+        if: ${{ always() && !inputs.demo }}
+        working-directory: backend
+        run: python -m radar.check
