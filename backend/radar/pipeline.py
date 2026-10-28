@@ -150,7 +150,7 @@ def run(con, demo: bool | None = None) -> None:
         if real is not None and bundle().info["train"].get("kofa") != len(real[1]):
             _log(f"Trener på nytt med {len(real[1])} KOFA-merkede kontrakter")
             _bundle = ModelBundle(settings.seed, real)
-        score_all(con, bundle(), log=_log)
+        score_all(con, bundle(), log=_log, mode=settings.priority_mode)
         if not demo and settings.einnsyn:
             # Etter scoring, siden bare prioriterte kontrakter slås opp
             _source("eInnsyn", lambda: einnsyn.refresh(con, log=_log), sources)

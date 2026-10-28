@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS cases (
     contract_id TEXT UNIQUE REFERENCES contracts(id),
     title TEXT, buyer TEXT, score REAL,
     status TEXT DEFAULT 'Ny', assignee TEXT DEFAULT '', note TEXT DEFAULT '',
+    vurdering TEXT DEFAULT '', vurdering_grunn TEXT DEFAULT '',
     created_at TEXT, updated_at TEXT
 );
 -- Revisjonsspor: hver endring på en sak, hvem og når.
@@ -130,6 +131,10 @@ def connect(path: Path) -> sqlite3.Connection:
     cols = {r[1] for r in con.execute("PRAGMA table_info(brreg_roles)")}
     if "fodselsaar" not in cols:  # databaser fra før v2.1
         con.execute("ALTER TABLE brreg_roles ADD COLUMN fodselsaar INTEGER")
+    cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
+    for c in ("vurdering", "vurdering_grunn"):  # revisorens vurdering, fra v2.3
+        if c not in cols:
+            con.execute(f"ALTER TABLE cases ADD COLUMN {c} TEXT DEFAULT ''")
     return con
 
 

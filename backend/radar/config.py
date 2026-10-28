@@ -16,6 +16,8 @@ class Settings:
     # "demo" fyller databasen med syntetiske kontrakter ved første oppstart.
     # "live" henter fra TED/Doffin/Brreg.
     mode: str = field(default_factory=lambda: _env("RADAR_MODE", "demo"))
+    # Prioritet: «regler» (røde flagg + registerflagg) eller «ml» (blanding med ML-modellene)
+    priority_mode: str = field(default_factory=lambda: _env("PRIORITET", "regler"))
     ted_from: str = field(default_factory=lambda: _env("TED_FROM", "2025-01-01"))
     doffin_api_key: str = field(default_factory=lambda: _env("DOFFIN_API_KEY"))
     # Doffin-tildelinger i live-modus. Nøkkelen kan også legges på av en proxy, så den kreves ikke her.
@@ -43,7 +45,7 @@ class Settings:
     proff_base_url: str = field(default_factory=lambda: _env("PROFF_BASE_URL", "https://api.proff.no"))
     proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
     renhold_register_url: str = field(default_factory=lambda: _env("RENHOLD_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/renhold_register.xml"))
-    bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL", "https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api"))
+    bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL"))  # API-et svarer 403 uten nøkkel (okt. 2026)
     # OpenSanctions er CC BY-NC: krever lisens ved kommersiell bruk. Av som standard.
     opensanctions_url: str = field(default_factory=lambda: _env("OPENSANCTIONS_URL"))
     opensanctions_api_key: str = field(default_factory=lambda: _env("OPENSANCTIONS_API_KEY"))

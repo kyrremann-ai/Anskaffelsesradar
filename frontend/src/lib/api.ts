@@ -41,7 +41,7 @@ export type SourceStatus = { status: "ok" | "feil" | "av" | "demo"; rows?: numbe
 export type CaseEvent = { at: string; actor: string; field: string; old: string | null; new: string | null };
 export type Case = {
   id: number; contract_id: string; title: string; buyer: string; status: string; assignee: string; note: string;
-  created_at: string; updated_at: string; events: CaseEvent[];
+  vurdering?: string; vurdering_grunn?: string; created_at: string; updated_at: string; events: CaseEvent[];
 };
 export type Assessment = { id: number; at: string; provider: string; model: string; text: string };
 

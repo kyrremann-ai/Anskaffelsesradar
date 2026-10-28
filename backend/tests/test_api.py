@@ -45,6 +45,13 @@ def test_cases_audit_trail(client):
     html = client.get(f"/api/cases/{c['id']}/arbeidspapir").text
     assert "Arbeidspapir" in html and "Be om protokoll" in html
     assert client.get("/api/contracts", params={"case_status": "med"}).json()["total"] == 1
+    c = client.patch(f"/api/cases/{c['id']}", json={"vurdering": "Ikke relevant", "vurdering_grunn": "Rammeavtale, normalt"},
+                     headers={"X-Remote-User": "per"}).json()
+    assert c["vurdering"] == "Ikke relevant" and any(e["field"] == "vurdering" and e["actor"] == "per" for e in c["events"])
+    assert client.patch(f"/api/cases/{c['id']}", json={"vurdering": "Kanskje"}).status_code == 422
+    lines = client.get("/api/labels.csv").text.splitlines()
+    assert lines[0].startswith("\ufeffkontrakt_id;") and len(lines) == 2
+    assert f"{cid};" in lines[1] and ";Ikke relevant;0;Rammeavtale, normalt;per;" in lines[1]
 
 
 def test_suppliers_and_export(client):

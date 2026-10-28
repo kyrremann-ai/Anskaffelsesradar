@@ -28,6 +28,8 @@ from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, mode
 
 con = db.connect(settings.db_path)
 CASE_STATUSES = ["Ny", "Under vurdering", "Fulgt opp", "Avsluttet – ingen funn", "Avsluttet – funn"]
+# Revisorens vurdering av om flagget var verdt å se på. Samles som fasit for ML-modellene.
+VURDERINGER = ["Relevant", "Ikke relevant"]
 
 
 async def _scheduler():
@@ -389,6 +391,8 @@ class CasePatch(BaseModel):
     status: str | None = None
     assignee: str | None = None
     note: str | None = None
+    vurdering: str | None = None
+    vurdering_grunn: str | None = None
 
 
 def actor(req: Request) -> str:
@@ -428,6 +432,8 @@ def update_case(case_id: int, body: CasePatch, req: Request):
         raise HTTPException(404, "Fant ikke saken")
     if body.status and body.status not in CASE_STATUSES:
         raise HTTPException(422, f"Ugyldig status. Gyldige: {CASE_STATUSES}")
+    if body.vurdering and body.vurdering not in VURDERINGER:
+        raise HTTPException(422, f"Ugyldig vurdering. Gyldige: {VURDERINGER}")
     t = db.now()
     with db.tx(con):
         for field, new in body.model_dump(exclude_none=True).items():
@@ -446,6 +452,31 @@ def delete_case(case_id: int):
     return {"deleted": case_id}
 
 
+@app.get("/api/labels.csv")
+def labels_csv():
+    """Revisorenes vurderinger som fasit for ML: én rad per vurdert sak, med flaggene og scorene den hadde."""
+    df = frame().set_index("id")
+    rows = []
+    for c in con.execute("SELECT * FROM cases WHERE vurdering != '' ORDER BY updated_at"):
+        ev = con.execute("SELECT at, actor FROM case_events WHERE case_id=? AND field='vurdering' ORDER BY id DESC LIMIT 1",
+                         (c["id"],)).fetchone()
+        r = df.loc[c["contract_id"]] if c["contract_id"] in df.index else None
+        rows.append({"kontrakt_id": c["contract_id"], "tittel": c["title"], "oppdragsgiver": c["buyer"],
+                     "vurdering": c["vurdering"], "relevant": int(c["vurdering"] == "Relevant"), "begrunnelse": c["vurdering_grunn"],
+                     "vurdert_av": ev["actor"] if ev else "", "vurdert": ev["at"] if ev else "", "status": c["status"],
+                     "prioritet": clean(r.priority) if r is not None else None, "cri": clean(r.cri) if r is not None else None,
+                     "ml_score": clean(r.ml_score) if r is not None else None,
+                     "flagg": ", ".join(f["label"] for f in r["flags"]) if r is not None else ""})
+    buf = io.StringIO()
+    pd.DataFrame(rows, columns=LABEL_COLS).to_csv(buf, index=False, sep=";", decimal=",")
+    return StreamingResponse(iter(["\ufeff" + buf.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=revisorvurderinger.csv"})
+
+
+LABEL_COLS = ["kontrakt_id", "tittel", "oppdragsgiver", "vurdering", "relevant", "begrunnelse", "vurdert_av", "vurdert",
+              "status", "prioritet", "cri", "ml_score", "flagg"]
+
+
 @app.get("/api/cases/{case_id}/arbeidspapir", response_class=HTMLResponse)
 def workpaper(case_id: int):
     """Utskriftsvennlig arbeidspapir (lagre som PDF fra nettleseren)."""
@@ -459,6 +490,8 @@ def workpaper(case_id: int):
     events = "".join(f"<tr><td>{e(v['at'])}</td><td>{e(v['actor'] or '')}</td><td>{e(v['field'])}</td><td>{e(str(v['old'] or ''))}</td><td>{e(str(v['new'] or ''))}</td></tr>" for v in d["case"]["events"])
     ai = "".join(f"<h3>AI-vurdering {e(a['at'])} ({e(a['provider'])}/{e(a['model'])})</h3><pre>{e(a['text'])}</pre>" for a in d["assessments"])
     sup = "".join(f"<li>{e((s['brreg'] or {}).get('navn') or s['orgnr'])} – orgnr {e(s['orgnr'])}, stiftet {e(str((s['brreg'] or {}).get('stiftet') or '–'))}</li>" for s in d["suppliers"])
+    ml = (f", ML {fmt(d['ml_score'])}, avvik {fmt(d['anomaly'])}" if (db.get_meta(con, "weights") or {}).get("mode") == "ml"
+          else f". ML-score {fmt(d['ml_score'])} er under utvikling og teller ikke")
     body = f"""<!doctype html><html lang="nb"><meta charset="utf-8"><title>Arbeidspapir sak {case_id}</title>
 <style>body{{font:14px/1.5 system-ui,sans-serif;max-width:800px;margin:24px auto;padding:0 16px;color:#111}}
 table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:13px}}
@@ -466,7 +499,7 @@ pre{{white-space:pre-wrap;background:#f5f5f5;padding:8px}}small{{color:#666}}</s
 <h1>Arbeidspapir: {e(d['title'] or '')}</h1>
 <p><b>Oppdragsgiver:</b> {e(d['buyer'] or '')} &nbsp; <b>Kunngjøring:</b> {e(d['id'])} ({e(d['pub_date'] or '')})<br>
 <b>Status:</b> {e(c['status'])} &nbsp; <b>Ansvarlig:</b> {e(c['assignee'] or '–')} &nbsp; <b>Utskrevet:</b> {db.now()}</p>
-<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}) – ML {fmt(d['ml_score'])}, CRI {fmt(d['cri'])}, avvik {fmt(d['anomaly'])}.
+<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}) – røde flagg (CRI) {fmt(d['cri'])}{ml}.
 Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>{e(d['method'] or '')}</td></tr><tr><th>Antall tilbud</th><td>{fmt(d['num_bidders'])}</td></tr>
