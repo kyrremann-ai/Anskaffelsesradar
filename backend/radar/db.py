@@ -146,6 +146,20 @@ CREATE TABLE IF NOT EXISTS kofa_matches (
 -- eInnsyn: oppdragsgivers enhet (tom streng = ikke i eInnsyn) og journalposter per kontrakt
 CREATE TABLE IF NOT EXISTS einnsyn_enhet (orgnr TEXT PRIMARY KEY, enhet_id TEXT);
 CREATE TABLE IF NOT EXISTS einnsyn (contract_id TEXT PRIMARY KEY, items TEXT, at TEXT);
+-- Regnskap for alle år og typer (SELSKAP | KONSERN). Tabellen regnskap over holder siste selskapsregnskap.
+CREATE TABLE IF NOT EXISTS regnskap_aar (
+    orgnr TEXT, aar INTEGER, type TEXT, driftsinntekter REAL, egenkapital REAL, PRIMARY KEY (orgnr, aar, type)
+);
+-- Brregs endringslogg per enhet: når adresse, ansatte og roller endret seg (for «på tildelingstidspunktet»).
+-- felt: adresse | ansatte | roller | annet | ukjent (endring uten detaljer). verdi er ny verdi når Brreg oppgir den.
+CREATE TABLE IF NOT EXISTS brreg_changes (orgnr TEXT, at TEXT, felt TEXT, verdi TEXT);
+CREATE INDEX IF NOT EXISTS ix_changes_org ON brreg_changes(orgnr);
+-- Hvor langt tilbake endringsloggen er hentet per enhet
+CREATE TABLE IF NOT EXISTS brreg_changes_fetched (orgnr TEXT PRIMARY KEY, since TEXT, fetched_at TEXT);
+-- Samme juridiske virksomhet under nytt orgnr: fusjon, fisjon, omdanning. Fra fil (data/import/endringer*.csv).
+CREATE TABLE IF NOT EXISTS brreg_successors (
+    fra_orgnr TEXT, til_orgnr TEXT, type TEXT, dato TEXT, kilde TEXT, PRIMARY KEY (fra_orgnr, til_orgnr)
+);
 """
 
 

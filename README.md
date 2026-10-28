@@ -116,7 +116,9 @@ Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ik
 
 | Kilde | Hvordan | Tilgang | Flagg |
 |---|---|---|---|
-| Regnskapsregisteret | API per orgnr (`REGNSKAP=1`) | Åpent | kontrakt > 50 % av omsetning, negativ egenkapital, AS uten regnskap |
+| Regnskapsregisteret | API per orgnr (`REGNSKAP=1`), alle år og konsernregnskap | Åpent | årlig kontraktsverdi > 50 % av omsetning i tildelingsåret, negativ egenkapital, AS uten regnskap |
+| Brreg endringslogg | `oppdateringer/enheter` og `oppdateringer/roller`, bare for leverandører med felles adresse/roller eller uten ansatte | Åpent | avgjør om adresse, ansatte og roller gjaldt på tildelingstidspunktet |
+| Fusjon/fisjon/omdanning | Fil i `data/import/endringer*.csv` (`fra_orgnr;til_orgnr;type;dato`) | Kunngjøringer i Brreg | to orgnr regnes som samme virksomhet |
 | Aksjonærregisteret (Skatteetaten) | Fil i `data/import/aksjonaer<år>.csv` | Fil fra Skatteetaten eller aksjeeiere.no | felles eier med konkurrent, eier har rolle hos oppdragsgiver |
 | Proff API | `PROFF_API_KEY` | Betalt avtale med Proff. Vi skraper ikke proff.no | eiere, som over |
 | Renholdsregisteret | `RENHOLD_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på renhold (CPV 9091) ikke godkjent |
@@ -135,6 +137,7 @@ Personvern: kandidatlister, PEP og personlige eiere er personopplysninger. Treff
 
 - Klagerisiko er trent på KOFA-saker koblet til Doffin med navnesøk. Kommuner er lettere å koble enn statlige etater, så kommune-effekten kan være delvis kunstig.
 - Rammeavtaler oppgir ofte maksverdi. Overskridelsesflagget får derfor halv vekt på rammeavtaler.
+- Leverandørflaggene (omsetning, ansatte, adresse, roller, eiere) sjekkes mot alternative forklaringer før de vises: se `radar/supplier_context.py` og testplanen i `docs/testplan-leverandorflagg.md`. Brregs endringslogg har detaljer om hva som endret seg bare for nyere endringer (fra ca. 2026), og rollefeeden sier bare *at* roller endret seg. Fusjon og fisjon finnes ikke i det åpne API-et og må legges inn som fil.
 - Reelle rettighetshavere er ikke åpent. Eierskap dekkes av Aksjonærregisteret (årlig fil, ett år gammel) og eventuelt Proff API.
 - Adapterne for Regnskapsregisteret, Arbeidstilsynet, OpenSanctions og Proff er testet mot fixtures, ikke mot live-tjenestene. Proff-feltnavn må bekreftes mot deres dokumentasjon når avtalen er på plass.
 - Matching av personer på tvers av virksomheter bruker navn og fødselsdato (hashet med salt).

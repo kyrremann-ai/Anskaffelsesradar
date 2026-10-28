@@ -523,7 +523,7 @@ def workpaper(case_id: int):
     d = contract_detail(c["contract_id"])
     e = html.escape
     fmt = lambda v: "–" if v is None else (f"{v:,.0f}".replace(",", " ") if isinstance(v, (int, float)) else e(str(v)))  # noqa: E731
-    flags = "".join(f"<li>{e(f['label'])}{' – ' + e(f['why']) if f.get('why') else ''} <small>(kilde: {e(f['source'])})</small></li>" for f in d["flags"]) or "<li>Ingen</li>"
+    flags = "".join(f"<li>{e(f['label'])}{' – ' + e(f['why']) if f.get('why') else ''}{' (' + e(f['data_note']) + ')' if f.get('data_note') else ''} <small>(kilde: {e(f['source'])})</small></li>" for f in d["flags"]) or "<li>Ingen</li>"
     events = "".join(f"<tr><td>{e(v['at'])}</td><td>{e(v['actor'] or '')}</td><td>{e(v['field'])}</td><td>{e(str(v['old'] or ''))}</td><td>{e(str(v['new'] or ''))}</td></tr>" for v in d["case"]["events"])
     ai = "".join(f"<h3>AI-vurdering {e(a['at'])} ({e(a['provider'])}/{e(a['model'])})</h3><pre>{e(a['text'])}</pre>" for a in d["assessments"])
     sup = "".join(f"<li>{e((s['brreg'] or {}).get('navn') or s['orgnr'])} – orgnr {e(s['orgnr'])}, stiftet {e(str((s['brreg'] or {}).get('stiftet') or '–'))}</li>" for s in d["suppliers"])

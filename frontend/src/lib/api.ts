@@ -13,8 +13,10 @@ if (STATIC) onCasesChange(() => queryClient.invalidateQueries());
 export type Tier = "Høy" | "Forhøyet" | "Lav" | "Intensjon";
 // Faste kontrollpunkter: slår ut uansett hvordan resten av datasettet ser ut
 export type Check = { key: string; label: string; why?: string };
+// checks: alternative forklaringer som er sjekket (leverandørflagg). data_note: hva som mangler i dataene.
+export type FlagCheck = { q: string; status: "ok" | "justert" | "forklarer" | "svekker" | "ukjent"; a: string };
 // bidrag = prioritetspoeng flagget gir (summen av bidragene er prioriteten)
-export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number };
+export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number; checks?: FlagCheck[]; data_note?: string };
 
 export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;

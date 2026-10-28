@@ -317,7 +317,7 @@ export async function saveWorkpaper(key: string) {
   const d = rows.find((r) => keyOf(r.id) === key);
   if (!c || !d) throw new HttpError("Fant ikke saken");
   const fmt = (v: unknown) => (v == null ? "–" : typeof v === "number" ? Math.round(v).toLocaleString("nb-NO") : esc(v));
-  const flags = d.flags.map((f) => `<li>${esc(f.label)}${f.why ? " – " + esc(f.why) : ""} <small>(kilde: ${esc(f.source)})</small></li>`).join("") || "<li>Ingen</li>";
+  const flags = d.flags.map((f) => `<li>${esc(f.label)}${f.why ? " – " + esc(f.why) : ""}${f.data_note ? " (" + esc(f.data_note) + ")" : ""} <small>(kilde: ${esc(f.source)})</small></li>`).join("") || "<li>Ingen</li>";
   const sup = d.winner_ids.map((o) => `<li>${esc(cards[o]?.brreg?.navn ?? o)} – orgnr ${esc(o)}, stiftet ${esc(cards[o]?.brreg?.stiftet ?? "–")}</li>`).join("");
   const ev = c.events.map((e) => `<tr><td>${esc(e.at)}</td><td>${esc(e.actor)}</td><td>${esc(e.field)}</td><td>${esc(e.old)}</td><td>${esc(e.new)}</td></tr>`).join("");
   const html = `<!doctype html><html lang="nb"><meta charset="utf-8"><title>Arbeidspapir ${esc(d.title)}</title>

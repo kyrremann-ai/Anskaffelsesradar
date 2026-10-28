@@ -13,7 +13,8 @@ import traceback
 
 from . import db
 from .config import settings
-from .ingest import brreg, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
+from . import supplier_context
+from .ingest import brreg, brreg_changes, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .observasjon import link
 from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
@@ -82,6 +83,9 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
         rows = registers.parse(f.read_bytes())
         registers.store(con, "bemanning", rows)
         out["Bemanningsregisteret"] = len(rows)
+    # Fusjon/fisjon/omdanning: fra_orgnr;til_orgnr;type;dato
+    for f in sorted(d.glob("endringer*.csv")):
+        out["Fusjon/fisjon (fil)"] = brreg_changes.import_successors(con, f)
     # Kundens fakturadata (bare i kundens database)
     for f in sorted([*d.glob("faktura*.csv"), *d.glob("faktura*.xlsx")]):
         out["Fakturadata"] = out.get("Fakturadata", 0) + faktura.import_file(con, f, log=_log)
@@ -109,6 +113,11 @@ def live_sources(con) -> dict:
     s, src = settings, {}
     # Brreg og regnskap hentes bare for nye leverandører; 0 betyr at alt allerede er lagret
     _source("Brønnøysundregistrene", lambda: brreg.refresh(con, s.brreg_user_agent, s.person_salt, log=_log), src, "nye siden sist")
+    # Endringslogg bare for leverandører med felles adresse/roller eller uten ansatte. Dekker fra ett år før TED_FROM.
+    since = f"{int(s.ted_from[:4]) - 1}{s.ted_from[4:10]}"
+    _source("Brreg endringslogg", lambda: brreg_changes.refresh(
+        con, supplier_context.change_candidates(con, brreg.BrregIndex(con), supplier_context.contracts_for_candidates(con)),
+        since, s.brreg_user_agent, log=_log), src, "nye siden sist")
     _source("Regnskapsregisteret", lambda: regnskap.refresh(con, s.brreg_user_agent, log=_log) if s.regnskap else None, src,
             "nye siden sist")
     _source("Proff API", lambda: owners.refresh_proff(con, s.proff_api_key, s.proff_base_url, s.proff_auth_scheme, log=_log)
