@@ -30,7 +30,7 @@ export default function Method() {
         desc="Tre klassifikatorer, røde flagg fra Fazekas sin korrupsjonsrisikoindeks (CRI), avviksdeteksjon og Brreg-flagg, kombinert til én prioritet. Bygget på eksamensrapporten «Detecting Corruption in Public Procurement Using Machine Learning» (Foros, 2026)." />
       <div className="mb-4 rounded-md border border-mid/40 bg-mid-soft p-4 text-sm text-mid">
         <strong>Viktig:</strong> Modellene er trent på {(m.train.n - (m.train.kofa ?? 0)).toLocaleString("nb-NO")} syntetiske anbud ({m.train.positives} merket mistenkelige), som i rapporten.
-        Treffsikkerheten under gjelder syntetiske data og sier ikke hvor godt modellen treffer på ekte kontrakter. {m.train.kofa ? ` I tillegg brukes ${m.train.kofa} kontrakter koblet til KOFA-avgjørelser`${m.sources?.KOFA?.status === "demo" ? " (demodata)" : ""}.` : " Neste steg er å trene på ekte fasit fra KOFA-avgjørelser."}
+        Treffsikkerheten under gjelder syntetiske data og sier ikke hvor godt modellen treffer på ekte kontrakter. {m.train.kofa ? ` I tillegg brukes ${m.train.kofa} kontrakter koblet til KOFA-avgjørelser${m.sources?.KOFA?.status === "demo" ? " (demodata)" : ""}.` : " Neste steg er å trene på ekte fasit fra KOFA-avgjørelser."}
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <Card title="Modellytelse på holdout-testsett" desc={`Seed ${m.train.seed}, 25 % holdout, 5-fold stratifisert CV`}>
