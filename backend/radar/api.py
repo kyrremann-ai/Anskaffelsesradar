@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, llm, pipeline
+from . import db, fakturakontroll, llm, pipeline
 from .config import settings
 from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
@@ -258,6 +258,12 @@ def contracts(buyers: str | None = None, q: str = "", tier: str = "", method: st
     df = df.sort_values(sort, ascending=dir == "asc", na_position="last")
     page_df = df.iloc[(page - 1) * limit: page * limit]
     return {"rows": [row_out(r) for _, r in page_df.iterrows()], "total": len(df)}
+
+
+@app.get("/api/invoices")
+def invoices(buyers: str | None = None):
+    """Kundens fakturaer per leverandør mot kunngjorte kontrakter. Bare summer, aldri enkeltlinjer."""
+    return fakturakontroll.analyse(con, {b for b in buyers.split(",") if b} if buyers else None)
 
 
 @app.get("/api/contracts/export.csv")

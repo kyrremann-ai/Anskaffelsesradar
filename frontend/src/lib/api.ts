@@ -117,3 +117,12 @@ export function useApi<T>(path: string, params: Record<string, unknown> = {}, op
   const url = path + qs(params);
   return useQuery<T>({ queryKey: [url], queryFn: () => api<T>(url), ...opts });
 }
+
+// Fakturakontroll: kundens kjøp per leverandør mot kunngjorte kontrakter (bare summer, aldri enkeltlinjer)
+export type InvoiceRow = {
+  buyer_id: string; orgnr: string; name: string | null; public: boolean; n: number; total: number; max_12m: number;
+  first: string; last: string; accounts: { account: string; sum: number }[];
+  contracts: { id: string; source: string; url: string | null; title: string; pub_date: string; value: number | null; type: string }[];
+  checks: Check[];
+};
+export type InvoiceResult = { rows: InvoiceRow[]; period: [string, string] | null; radar_from: string | null };

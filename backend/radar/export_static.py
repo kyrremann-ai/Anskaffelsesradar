@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import api, db, llm, pipeline
+from . import api, db, fakturakontroll, llm, pipeline
 from .scoring import FLAG_LABELS
 
 # Artifacten tillater 16 MB per fil. Deler gir god margin og laster parallelt.
@@ -93,7 +93,9 @@ def export(out: Path, log=print) -> dict[str, int]:
     parts = {"contracts": [f for f in files if f.startswith("contracts-")], "cards": [f for f in files if f.startswith("cards-")]}
     files["meta.json"] = {"meta": meta, "model": api.model(), "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()}, "files": parts,
                          # Samme instruks som serverens AI-vurdering, så artifacten ber Claude om det samme
-                         "llm_system": llm.SYSTEM}
+                         "llm_system": llm.SYSTEM,
+                         # Fakturakontroll: bare summer per leverandør, aldri enkeltlinjer
+                         "invoices": fakturakontroll.analyse(api.con)}
     # Gamle filer fra forrige eksport fjernes, så publiseringen ikke tar med utdaterte deler
     for old in [*out.glob("contracts*.json"), *out.glob("cards*.json")]:
         if old.name not in files:
