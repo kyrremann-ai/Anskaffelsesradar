@@ -24,6 +24,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from . import klagerisiko
 from .db import get_meta, set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
@@ -234,8 +235,11 @@ def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
     df["percentile"] = pct_rank(raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)
     df["tier"] = np.select([df.percentile >= 95, df.percentile >= 80], ["Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
+    # Klagerisiko (eksperimentell): persentil for sannsynlighet for KOFA-klage. Vises, men teller ikke i prioriteten.
+    km = klagerisiko.load_model()
+    df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "ml_score", "ml_lr", "ml_rf", "ml_gb", "cri", "anomaly",
+    cols = ["priority", "tier", "percentile", "ml_score", "ml_lr", "ml_rf", "ml_gb", "cri", "anomaly", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():

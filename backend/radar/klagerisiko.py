@@ -9,6 +9,7 @@ Bare felt som finnes når konkurransen kunngjøres brukes, så modellen kan scor
 
     python -m radar.klagerisiko hent      # utvalg av konkurranser til data/cache/doffin_konkurranser.json
     python -m radar.klagerisiko test [--json fil]
+    python -m radar.klagerisiko eksporter  # trener og lagrer radar/models/klagerisiko.json
 """
 from __future__ import annotations
 
@@ -161,16 +162,86 @@ def table(r: dict) -> str:
     return "\n".join(lines)
 
 
+# Felt som også finnes på kontraktene i databasen (TED/Doffin-tildelinger), så samme modell kan
+# score dem. Gruppert CV-AUC med dette settet: ca. 0,66, som med alle feltene.
+CONTRACT_FEATURES = ["log_est_value", "tender_days", "framework", "works", "services", "eos",
+                     *[f"buyer_{n}" for n, _ in BUYER_TYPES]]
+MODEL_PATH = Path(__file__).parent / "models" / "klagerisiko.json"
+
+
+def contract_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Samme features som features(), fra kontrakttabellen."""
+    est = pd.to_numeric(df.est_value, errors="coerce")
+    cpv = df.cpv.fillna("").astype(str)
+    buyer = df.buyer.fillna("").map(norm_name)
+    X = pd.DataFrame({
+        "log_est_value": np.log10(est.where(est > 0)),
+        "tender_days": pd.to_numeric(df.tender_duration_days, errors="coerce"),
+        "framework": pd.to_numeric(df.framework, errors="coerce").fillna(0).clip(0, 1),
+        "works": (cpv.str[:2] == "45").astype(float),
+        "services": (cpv.str[:1].isin(list("5679")) & (cpv.str[:2] != "45")).astype(float),
+        "eos": ((df.source == "ted") | (est > 1.4e6)).astype(float),
+    }, index=df.index)
+    for name, pat in BUYER_TYPES:
+        X[f"buyer_{name}"] = buyer.str.contains(pat, regex=True).astype(float)
+    return X[CONTRACT_FEATURES]
+
+
+def _design(X: pd.DataFrame, m: dict) -> np.ndarray:
+    Z = X[m["features"]].copy()
+    miss = [Z[c].isna().astype(float).to_numpy() for c in m["missing"]]
+    Z = Z.fillna(pd.Series(m["medians"]))
+    A = np.column_stack([Z.to_numpy(dtype=float), *miss]) if miss else Z.to_numpy(dtype=float)
+    return (A - np.array(m["mean"])) / np.array(m["scale"])
+
+
+def export_model(link_cache: Path, sample_cache: Path, path: Path = MODEL_PATH, seed: int = 42) -> dict:
+    """Trener logistisk regresjon på CONTRACT_FEATURES og lagrer parametrene som JSON (ingen pickle)."""
+    X, y, groups, _ = dataset(link_cache, sample_cache)
+    X = X[CONTRACT_FEATURES]
+    m = {"features": CONTRACT_FEATURES, "missing": [c for c in CONTRACT_FEATURES if X[c].isna().any()],
+         "medians": {c: float(X[c].median()) for c in CONTRACT_FEATURES}}
+    m["mean"], m["scale"] = [0.0], [1.0]
+    raw = _design(X, {**m, "mean": 0.0, "scale": 1.0})
+    m["mean"], m["scale"] = raw.mean(axis=0).tolist(), np.where(raw.std(axis=0) > 0, raw.std(axis=0), 1.0).tolist()
+    A = _design(X, m)
+    clf = LogisticRegression(C=0.3, class_weight="balanced", max_iter=2000)
+    p = np.zeros(len(y))
+    for a, b in StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=seed).split(A, y, groups):
+        p[b] = clone(clf).fit(A[a], y[a]).predict_proba(A[b])[:, 1]
+    lo, hi = _ci(y, p)
+    clf.fit(A, y)
+    m.update(coef=clf.coef_[0].tolist(), intercept=float(clf.intercept_[0]),
+             metrics={"auc": float(roc_auc_score(y, p)), "lo": lo, "hi": hi, "n": int(len(y)), "positive": int(y.sum())},
+             trained=date.today().isoformat())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(m, indent=1, ensure_ascii=False))
+    return m
+
+
+def load_model(path: Path = MODEL_PATH) -> dict | None:
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def predict(df: pd.DataFrame, m: dict) -> np.ndarray:
+    """Sannsynlighet (ikke kalibrert: trent med balanserte klasser) for at kontrakten havner i KOFA."""
+    z = _design(contract_features(df), m) @ np.array(m["coef"]) + m["intercept"]
+    return 1 / (1 + np.exp(-z))
+
+
 if __name__ == "__main__":
     from .config import settings
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["hent", "test"])
+    ap.add_argument("cmd", choices=["hent", "test", "eksporter"])
     ap.add_argument("--fra", default="2021-01-01")
     ap.add_argument("--json", type=Path)
     a = ap.parse_args()
     cache = settings.data_dir / "cache"
     sample = cache / "doffin_konkurranser.json"
-    if a.cmd == "hent":
+    if a.cmd == "eksporter":
+        m = export_model(cache / "kofa_doffin.json", sample)
+        print(f"Lagret {MODEL_PATH}: AUC {m['metrics']['auc']:.3f} ({m['metrics']['lo']:.2f}–{m['metrics']['hi']:.2f})")
+    elif a.cmd == "hent":
         print(f"{fetch_sample(sample, a.fra)} konkurranser lagret")
     else:
         r = evaluate(cache / "kofa_doffin.json", sample, settings.seed)

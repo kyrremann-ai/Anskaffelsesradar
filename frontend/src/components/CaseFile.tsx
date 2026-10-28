@@ -218,6 +218,11 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <Meter value={d.priority} className="my-1.5" />
           <p className="text-xs text-muted">Blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste. Datadekning {d.data_coverage} av 4 nøkkelfelt.</p>
         </div>
+        {d.klagerisiko != null && (
+          <p className="col-span-2 text-xs text-muted">
+            <b className="font-medium">Klagerisiko (eksperimentell): {Math.round(d.klagerisiko)}</b>. Høyere klagerisiko enn {Math.round(d.klagerisiko)} % av kontraktene,
+            ut fra verdi, oppdragsgivertype og type anskaffelse. Måler risiko for KOFA-klage, ikke korrupsjon, og teller ikke i prioriteten.
+          </p>)}
         <details className="col-span-2 text-xs text-muted">
           <summary className="cursor-pointer">Delscorer</summary>
           <p className="mt-1">Røde flagg (CRI) {Math.round(d.cri)}{mlCounts && <> · avvik {Math.round(d.anomaly)}</>}. {mlCounts ? "" : "Prioriteten bygger på de røde flaggene og registerflaggene."}</p>

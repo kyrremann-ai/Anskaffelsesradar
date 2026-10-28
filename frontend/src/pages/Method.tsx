@@ -11,6 +11,12 @@ type Model = {
   flags: { key: string; label: string; weight: number }[];
   extra_flags: { key: string; label: string; weight: number; source: string }[];
   sources: Record<string, SourceStatus>;
+  klagerisiko?: { metrics: { auc: number; lo: number; hi: number; n: number; positive: number }; trained?: string; coef: Record<string, number> } | null;
+};
+const KR_LABELS: Record<string, string> = {
+  log_est_value: "Estimert verdi", tender_days: "Tilbudsfrist", framework: "Rammeavtale", works: "Bygg og anlegg", services: "Tjenester",
+  eos: "Over EØS-terskel", buyer_kommune: "Kommune", buyer_fylke: "Fylkeskommune", buyer_helse: "Helseforetak",
+  "buyer_innkjøpssamarbeid": "Innkjøpssamarbeid", buyer_stat: "Statlig virksomhet",
 };
 const STATUS: Record<string, [string, string]> = {
   ok: ["Hentet", "text-lo"], demo: ["Demodata", "text-mid"], av: ["Ikke satt opp", "text-muted"], feil: ["Feil", "text-hi"],
@@ -129,6 +135,24 @@ export default function Method() {
               <span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
           </ul>
         </Card>
+        {m.klagerisiko && (
+          <Card title="Klagerisiko (eksperimentell)" desc="Sannsynlighet for at en anskaffelse havner i KOFA. Vises ved siden av flaggene og teller ikke i prioriteten.">
+            <p className="text-sm">
+              Logistisk regresjon trent på {m.klagerisiko.metrics.positive} Doffin-konkurranser som ble klaget inn til KOFA, mot et tilfeldig utvalg
+              av {(m.klagerisiko.metrics.n - m.klagerisiko.metrics.positive).toLocaleString("nb-NO")} konkurranser fra 2019–2026. Kryssvalidert AUC{" "}
+              <span className="num">{f3(m.klagerisiko.metrics.auc)}</span> (95 % KI {m.klagerisiko.metrics.lo.toFixed(2).replace(".", ",")}–{m.klagerisiko.metrics.hi.toFixed(2).replace(".", ",")}),
+              med oppdragsgiverne holdt adskilt. De 10 % med høyest score inneholder omtrent 26 % av KOFA-sakene. Scoren er persentil blant kontraktene i radaren.
+            </p>
+            <ul className="mt-2 divide-y divide-line text-sm">{Object.entries(m.klagerisiko.coef).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map(([k, v]) => (
+              <li key={k} className="flex justify-between py-1.5"><span>{KR_LABELS[k] ?? k}</span><span className="num text-muted">{v > 0 ? "øker" : "senker"}</span></li>))}
+            </ul>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted">
+              <li>Måler <b>klagerisiko, ikke korrupsjon</b>. Store konkurranser med mange tilbydere klages oftere inn, mens direkte anskaffelser uten konkurranse sjelden blir klaget inn.</li>
+              <li>KOFA-sakene er koblet til kunngjøringer med navnesøk. Kommuner er lettere å koble på navn enn statlige etater, så kommune-effekten kan være delvis kunstig.</li>
+              <li>Om KOFA fant brudd eller ikke lar seg ikke forutsi fra kunngjøringen (AUC rundt 0,5), så modellen skiller ikke på utfallet.</li>
+              <li>Teller ikke i prioriteten før revisorenes vurderinger viser at den treffer.</li>
+            </ul>
+          </Card>)}
         <Card title="Personopplysninger og rettslig grunnlag" desc="Gjelder aksjonærregisteret, kandidatlister og roller i Brreg">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>
