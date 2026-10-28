@@ -68,3 +68,24 @@ def test_evaluate(tmp_path):
     assert {m["name"] for m in res["models"]} == {"Logistisk regresjon", "Random Forest", "Gradient Boosting"}
     assert all(0 <= m["kofa_cv"] <= 1 for m in res["models"])
     assert "Syntetisk → KOFA" in table(res)
+    from radar.kofa_models import compare, table as mtable
+    cmp = compare(con, None)
+    assert cmp["n"] == 40 and cmp["from_doffin"] == 0
+    names = {m["name"] for m in cmp["models"]}
+    assert {"CRI (røde flagg)", "Regularisert LR (L2, C=0,1)"} <= names
+    assert all(m["lo"] <= m["hi"] for m in cmp["models"] if "auc" in m)
+    assert "95 % KI" in mtable(cmp)
+
+
+def test_link_helpers():
+    from radar.ingest import kofa_link as kl
+    s = "Innklagede gjennomførte en åpen anbudskonkurranse for anskaffelse av renholdstjenester. Klager anførte noe."
+    assert kl.subject(s) == "anskaffelse av renholdstjenester"
+    case = {"innklaget": "Testby kommune", "tittel": s}
+    hits = [{"buyer": [{"name": "Annen kommune"}], "heading": "Renholdstjenester", "type": "ANNOUNCEMENT_OF_COMPETITION"},
+            {"buyer": [{"name": "Testby kommune"}], "heading": "Renholdstjenester 2025", "type": "ANNOUNCEMENT_OF_COMPETITION",
+             "issueDate": "2025-01-01T00:00:00Z", "deadline": "2025-02-01T00:00:00Z", "id": "2025-1", "lots": []}]
+    h, score = kl.best_hit(hits, case)
+    assert h is hits[1] and score >= 0.5
+    row = kl.hit_row(h)
+    assert row["winner_ids"] == [] and row["tender_duration_days"] == 31 and row["id"] == "doffin-2025-1"

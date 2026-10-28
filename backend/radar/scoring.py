@@ -130,12 +130,15 @@ class ModelBundle:
         return sorted(out, key=lambda d: -abs(d["effect"]))[:top]
 
 
-def contracts_frame(con) -> pd.DataFrame:
+def contracts_frame(con, extra: list[dict] | None = None) -> pd.DataFrame:
+    """Kontrakter med avledede felt. `extra` er rader som ikke ligger i databasen (f.eks. Doffin-treff for KOFA)."""
     df = pd.read_sql_query("SELECT * FROM contracts", con)
+    for c in ("winner_ids", "winner_names"):
+        df[c] = df[c].map(lambda s: json.loads(s or "[]"))
+    if extra:
+        df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True)
     if df.empty:
         return df
-    df["winner_ids"] = df.winner_ids.map(lambda s: json.loads(s or "[]"))
-    df["winner_names"] = df.winner_names.map(lambda s: json.loads(s or "[]"))
     df["winner"] = df.winner_ids.map(lambda w: w[0] if w else None)
     df = df.sort_values(["pub_date", "id"]).reset_index(drop=True)
     # Tidligere tildelinger for samme oppdragsgiver + leverandør (før denne kontrakten)
