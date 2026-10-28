@@ -259,8 +259,26 @@ export async function exportCsv(params: Record<string, unknown>) {
   await save("anskaffelsesradar.csv", "﻿" + lines.join("\n"));
 }
 
+// Revisorenes vurderinger som fasit for ML (samme kolonner som serverens /api/labels.csv)
+export async function exportLabels() {
+  const { rows } = await load();
+  const byKey = new Map(rows.map((r) => [keyOf(r.id), r]));
+  const cols = ["kontrakt_id", "tittel", "oppdragsgiver", "vurdering", "relevant", "begrunnelse", "vurdert_av", "vurdert",
+    "status", "prioritet", "cri", "ml_score", "flagg"];
+  const lines = [cols.join(";")];
+  for (const key of cases.keys()) {
+    const c = await caseOut(key), r = byKey.get(key);
+    if (!c?.vurdering) continue;
+    const ev = c.events.find((e) => e.field === "vurdering"); // nyeste først
+    lines.push([r?.id ?? key, c.title, c.buyer, c.vurdering, c.vurdering === "Relevant" ? "1" : "0", c.vurdering_grunn ?? "",
+      ev?.actor ?? "", ev?.at ?? "", c.status, nb(r?.priority), nb(r?.cri), nb(r?.ml_score), (r?.flags ?? []).map((f) => f.label).join(", ")]
+      .map((v) => String(v ?? "")).map((v) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(";"));
+  }
+  await save("revisorvurderinger.csv", "\ufeff" + lines.join("\n"));
+}
+
 export async function saveWorkpaper(key: string) {
-  const { rows, cards } = await load();
+  const { rows, cards, model } = await load();
   const c = await caseOut(key);
   const d = rows.find((r) => keyOf(r.id) === key);
   if (!c || !d) throw new HttpError("Fant ikke saken");
@@ -275,7 +293,7 @@ pre{white-space:pre-wrap;background:#f5f5f5;padding:8px}small{color:#666}</style
 <h1>Arbeidspapir: ${esc(d.title)}</h1>
 <p><b>Oppdragsgiver:</b> ${esc(d.buyer)} &nbsp; <b>Kunngjøring:</b> ${esc(d.id)} (${esc(d.pub_date)})<br>
 <b>Status:</b> ${esc(c.status)} &nbsp; <b>Ansvarlig:</b> ${esc(c.assignee || "–")} &nbsp; <b>Utskrevet:</b> ${new Date().toISOString().slice(0, 19)}</p>
-<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}) – ML ${fmt(d.ml_score)}, CRI ${fmt(d.cri)}, avvik ${fmt(d.anomaly)}.
+<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}) – røde flagg (CRI) ${fmt(d.cri)}${model.weights?.mode === "ml" ? `, ML ${fmt(d.ml_score)}, avvik ${fmt(d.anomaly)}` : `. ML-score ${fmt(d.ml_score)} er under utvikling og teller ikke`}.
 Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>${esc(d.method)}</td></tr><tr><th>Antall tilbud</th><td>${fmt(d.num_bidders)}</td></tr>
@@ -353,8 +371,8 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
     if (method === "PATCH") {
       const now = new Date().toISOString(), who = await actor();
       const next = { ...c, events: [...c.events], updated_at: now } as StoredCase & Record<string, unknown>;
-      for (const k of ["status", "assignee", "note"] as const) {
-        if (k in body && body[k] !== c[k]) { next.events.push({ at: now, ...who, field: k, old: c[k], new: body[k] }); next[k] = body[k]; }
+      for (const k of ["status", "assignee", "note", "vurdering", "vurdering_grunn"] as const) {
+        if (k in body && (body[k] ?? "") !== (c[k] ?? "")) { next.events.push({ at: now, ...who, field: k, old: c[k] ?? null, new: body[k] ?? null }); next[k] = body[k]; }
       }
       await saveCase(key, next);
       return caseOut(key);

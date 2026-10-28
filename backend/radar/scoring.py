@@ -50,7 +50,10 @@ FLAG_LABELS = {
 }
 CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
 # Vekting i prioritetsscoren. Dokumentert på metodesiden.
-W_ML, W_CRI, W_ANOM, BRREG_PER_WEIGHT, BRREG_CAP = 0.60, 0.25, 0.15, 8.0, 20.0
+# «regler»: bare røde flagg og registerflagg. ML er under utvikling og vises ved siden av, men teller ikke.
+# «ml»: den opprinnelige blandingen fra eksamensrapporten.
+WEIGHTS = {"regler": (0.0, 1.0, 0.0), "ml": (0.60, 0.25, 0.15)}
+BRREG_PER_WEIGHT, BRREG_CAP = 8.0, 20.0
 # Minste antall KOFA-merkede kontrakter (per klasse) før de brukes i treningen
 KOFA_MIN = 30
 
@@ -194,7 +197,8 @@ def pct_rank(s: pd.Series) -> pd.Series:
     return s.rank(pct=True, method="average") * 100
 
 
-def score_all(con, bundle: ModelBundle, log=print) -> int:
+def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
+    w_ml, w_cri, w_anom = WEIGHTS.get(mode, WEIGHTS["regler"])
     df = contracts_frame(con)
     if df.empty:
         return 0
@@ -221,9 +225,10 @@ def score_all(con, bundle: ModelBundle, log=print) -> int:
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
         bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))
     df["cri"], df["brreg_boost"] = cri, bboost
-    raw = W_ML * df.ml_score + W_CRI * df.cri + W_ANOM * df.anomaly + df.brreg_boost
+    raw = w_ml * df.ml_score + w_cri * df.cri + w_anom * df.anomaly + df.brreg_boost
     df["priority"] = (raw / (100 + BRREG_CAP) * 100).clip(0, 100)
-    df["percentile"] = pct_rank(raw)
+    # Reglene gir mange like poengsummer; ved likhet rangeres større kontrakter først
+    df["percentile"] = pct_rank(raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)
     df["tier"] = np.select([df.percentile >= 95, df.percentile >= 80], ["Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
 
@@ -237,7 +242,8 @@ def score_all(con, bundle: ModelBundle, log=print) -> int:
         con.execute("DELETE FROM scores")
         con.executemany(f"INSERT INTO scores(contract_id, {','.join(cols)}, flags) VALUES ({','.join('?' * (len(cols) + 2))})", rows)
         set_meta(con, "model", bundle.info)
-        set_meta(con, "weights", {"ml": W_ML, "cri": W_CRI, "anomaly": W_ANOM, "brreg_per_weight": BRREG_PER_WEIGHT, "brreg_cap": BRREG_CAP})
+        set_meta(con, "weights", {"mode": mode if mode in WEIGHTS else "regler", "ml": w_ml, "cri": w_cri, "anomaly": w_anom,
+                                  "brreg_per_weight": BRREG_PER_WEIGHT, "brreg_cap": BRREG_CAP})
     log(f"Scoret {len(rows)} kontrakter")
     return len(rows)
 

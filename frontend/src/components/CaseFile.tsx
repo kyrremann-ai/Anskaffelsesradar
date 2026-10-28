@@ -106,12 +106,16 @@ function Supplier({ s }: { s: SupplierCard }) {
   );
 }
 
+const FIELD: Record<string, string> = { note: "notat", assignee: "ansvarlig", vurdering: "vurdering", vurdering_grunn: "begrunnelse" };
+
 function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
   const c = d.case;
   const [note, setNote] = useState(c?.note ?? "");
   const [assignee, setAssignee] = useState(c?.assignee ?? "");
+  const [grunn, setGrunn] = useState(c?.vurdering_grunn ?? "");
   const [fileError, setFileError] = useState("");
-  useEffect(() => { setNote(c?.note ?? ""); setAssignee(c?.assignee ?? ""); }, [c?.id, c?.note, c?.assignee]);
+  useEffect(() => { setNote(c?.note ?? ""); setAssignee(c?.assignee ?? ""); setGrunn(c?.vurdering_grunn ?? ""); },
+    [c?.id, c?.note, c?.assignee, c?.vurdering_grunn]);
   const done = () => queryClient.invalidateQueries();
   const create = useMutation({ mutationFn: () => api("/api/cases", { method: "POST", body: JSON.stringify({ contractId: d.id }) }), onSuccess: done });
   const patch = useMutation({
@@ -141,6 +145,18 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
             className="mt-1 h-9 w-full rounded-md border border-line bg-surface px-2 text-sm text-fg" />
         </label>
       </div>
+      <div className="rounded-md bg-sunk/60 p-2.5">
+        <div className="text-xs text-muted">Var flagget verdt å se på? Vurderingen logges og brukes til å forbedre modellene.</div>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {["Relevant", "Ikke relevant"].map((v) => (
+            <Button key={v} variant={c.vurdering === v ? undefined : "outline"} disabled={patch.isPending}
+              onClick={() => patch.mutate({ vurdering: c.vurdering === v ? "" : v, vurdering_grunn: grunn })}>{v}</Button>
+          ))}
+        </div>
+        <input value={grunn} onChange={(e) => setGrunn(e.target.value)} placeholder="Begrunnelse (valgfritt)"
+          onBlur={() => c.vurdering && grunn !== (c.vurdering_grunn ?? "") && patch.mutate({ vurdering_grunn: grunn })}
+          className="mt-2 h-9 w-full rounded-md border border-line bg-surface px-2 text-sm text-fg" />
+      </div>
       <label className="block text-xs text-muted">Notat
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4}
           className="mt-1 w-full rounded-md border border-line bg-surface p-2 text-sm text-fg" />
@@ -158,7 +174,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
         <ul className="mt-2 space-y-1 text-xs">
           {c.events.map((e, i) => (
             <li key={i} className="flex gap-2"><span className="num text-muted">{dateTime(e.at)}</span>
-              <span>{e.actor}: {e.field}{e.field !== "note" && e.new ? ` → ${e.new}` : ""}</span></li>
+              <span>{e.actor}: {FIELD[e.field] ?? e.field}{e.field !== "note" && e.new ? ` → ${e.new}` : ""}</span></li>
           ))}
         </ul>
       </details>
@@ -169,6 +185,8 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
 export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => void }) {
   const { data: d, isLoading } = useApi<ContractDetail>(`/api/contracts/${encodeURIComponent(id)}`);
   const { data: meta } = useApi<Meta>("/api/meta");
+  const { data: model } = useApi<{ weights: { mode?: string } | null }>("/api/model");
+  const mlCounts = model?.weights?.mode === "ml";
   const assess = useMutation({
     mutationFn: () => api(`/api/contracts/${encodeURIComponent(id)}/assess`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/contracts/${encodeURIComponent(id)}`] }),
@@ -202,7 +220,9 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         </div>
         <details className="col-span-2 text-xs text-muted">
           <summary className="cursor-pointer">Delscorer</summary>
-          <p className="mt-1">ML-modeller {Math.round(d.ml_score)} (logistisk regresjon {Math.round(d.ml_lr)}, Random Forest {Math.round(d.ml_rf)}, Gradient Boosting {Math.round(d.ml_gb)}) · røde flagg (CRI) {Math.round(d.cri)} · avvik {Math.round(d.anomaly)}.</p>
+          <p className="mt-1">Røde flagg (CRI) {Math.round(d.cri)}{mlCounts && <> · avvik {Math.round(d.anomaly)}</>}. {mlCounts ? "" : "Prioriteten bygger på de røde flaggene og registerflaggene."}</p>
+          <p className="mt-1">ML-modeller {Math.round(d.ml_score)} (logistisk regresjon {Math.round(d.ml_lr)}, Random Forest {Math.round(d.ml_rf)}, Gradient Boosting {Math.round(d.ml_gb)}){mlCounts
+            ? "." : <>: <b>under utvikling</b>, teller ikke i prioriteten ennå. Modellene er trent på syntetiske data og treffer ikke godt nok på ekte KOFA-saker.</>}</p>
         </details>
       </section>
 
@@ -222,7 +242,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
       )}
 
       {d.drivers.length > 0 && (
-        <Section title="Hva driver ML-scoren">
+        <Section title={mlCounts ? "Hva driver ML-scoren" : "Hva driver ML-scoren (under utvikling)"}>
           <p className="mb-2 text-xs text-muted">Endring i prosentpoeng hvis feltet hadde hatt en typisk verdi.</p>
           <div className="space-y-2">
             {d.drivers.map((p) => (
