@@ -7,6 +7,7 @@ på ekte KOFA-saker. Den beholdes som baseline i kofa_eval og kofa_models.
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,12 @@ CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
 NATIONAL_THRESHOLD = 1_300_000  # nasjonal terskelverdi, FOA § 5-1 (kr ekskl. mva)
 MIN_DEADLINE = {"open": 30, "restricted": 30, "neg-w-call": 30, "comp-dial": 30, "innovation": 30}  # dager, FOA del III
 MIN_DEADLINE_ACCELERATED = 15
+# Sammenligningsgruppe: oppdragsgivertype × sektor (CPV-hovedgruppe). Små grupper faller tilbake på oppdragsgivertype.
+PEER_MIN = 30
+BUYER_FORMS = {"KOMM": "Kommune", "KF": "Kommune", "FYLK": "Fylkeskommune", "HF": "Helseforetak", "STAT": "Stat",
+               "ORGL": "Stat", "SF": "Stat", "IKS": "Interkommunalt selskap"}
+BUYER_NAMES = [("Fylkeskommune", r"fylkeskommune"), ("Kommune", r"kommune|bydel"), ("Helseforetak", r"\bhf\b|helse|sykehus"),
+               ("Stat", r"direktorat|departement|etaten|tilsyn|statens|forsvar|politi|universitet|høgskole")]
 # Register-tillegg i prioritetsscoren. Dokumentert på metodesiden.
 BRREG_PER_WEIGHT, BRREG_CAP = 8.0, 20.0
 
@@ -233,6 +240,22 @@ def fixed_checks(r) -> list[dict]:
     return out
 
 
+def buyer_type(orgform: str | None, name: str | None) -> str:
+    if orgform in BUYER_FORMS:
+        return BUYER_FORMS[orgform]
+    n = str(name or "").lower()
+    return next((t for t, rx in BUYER_NAMES if re.search(rx, n)), "Annen oppdragsgiver")
+
+
+def peer_rank(df: pd.DataFrame, key: pd.Series, award: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Persentil innen oppdragsgivertype × sektor, og gruppen som ble brukt."""
+    group = df.buyer_type + " × " + df.sector.fillna("Annet")
+    n = group[award].value_counts()
+    group = group.where(group.map(n).fillna(0) >= PEER_MIN, df.buyer_type + " (alle sektorer)")
+    pct = key[award].groupby(group[award]).rank(pct=True, method="average") * 100
+    return pct.reindex(df.index), group
+
+
 def pct_rank(s: pd.Series) -> pd.Series:
     return s.rank(pct=True, method="average") * 100
 
@@ -251,23 +274,35 @@ def score_all(con, log=print) -> int:
              "award_value": r.award_value, "est_value": r.est_value}
         others = suppliers_by_buyer.get(r.buyer_id, set())
         bf = brreg.flags(c, others) + extra.flags(c, others)
-        flags.append(fl + bf)
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
-        bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))
+        bw = sum(f["weight"] for f in bf)
+        bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * bw))
+        # Hvor mange prioritetspoeng hvert flagg bidrar med (register-tillegget deles forholdsmessig når taket nås)
+        scale = (100 + BRREG_CAP) / 100
+        for f in fl:
+            f["bidrag"] = round(f["weight"] / CRI_MAX * 100 / scale, 1)
+        for f in bf:
+            f["bidrag"] = round(bboost[-1] * f["weight"] / bw / scale, 1) if bw else 0.0
+        flags.append(fl + bf)
     df["cri"], df["brreg_boost"] = cri, bboost
     raw = df.cri + df.brreg_boost
     df["priority"] = (raw / (100 + BRREG_CAP) * 100).clip(0, 100)
     # Reglene gir mange like poengsummer; ved likhet rangeres større kontrakter først.
     # Rangeringen gjelder bare kontraktene. Intensjonskunngjøringer rangeres ikke; de vises som eget kontrollpunkt.
     award = df.notice_type.eq("tildeling")
-    df["percentile"] = pct_rank((raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)[award]).reindex(df.index)
+    key = raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4
+    df["percentile"] = pct_rank(key[award]).reindex(df.index)
     df["tier"] = np.select([~award, df.percentile >= 95, df.percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
+    # Samme rangering innen sammenligningsgruppen, så sektorer som kjøper ulikt ikke dominerer topplisten
+    df["buyer_type"] = [buyer_type((brreg.ent.get(b) or {}).get("orgform"), n) for b, n in zip(df.buyer_id, df.buyer)]
+    df["peer_percentile"], df["peer_group"] = peer_rank(df, key, award)
+    df["peer_tier"] = np.select([~award, df.peer_percentile >= 95, df.peer_percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
     # Klagerisiko (eksperimentell): persentil for sannsynlighet for KOFA-klage. Vises, men teller ikke i prioriteten.
     km = klagerisiko.load_model()
     df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "cri", "klagerisiko",
+    cols = ["priority", "tier", "percentile", "peer_group", "peer_percentile", "peer_tier", "cri", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():

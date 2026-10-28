@@ -202,7 +202,12 @@ function filter(all: Row[], p: URLSearchParams) {
   let d = scope(all, p.get("buyers"));
   const q = (p.get("q") ?? "").toLowerCase();
   if (q) d = d.filter((r) => `${r.title} ${r.buyer} ${r.winner_names.join(" ")}`.toLowerCase().includes(q));
-  for (const k of ["tier", "method", "sector", "region"] as const) { const v = p.get(k); if (v) d = d.filter((r) => r[k] === v); }
+  // rank=gruppe: prioritetsnivå innen sammenligningsgruppen i stedet for nasjonalt
+  const group = p.get("rank") === "gruppe";
+  for (const k of ["tier", "method", "sector", "region"] as const) {
+    const v = p.get(k), col = k === "tier" && group ? "peer_tier" : k;
+    if (v) d = d.filter((r) => r[col] === v);
+  }
   // flag=regel:<nøkkel> gir faste kontrollpunkter, flag=type:<kunngjøringstype> gir f.eks. intensjoner
   const flag = p.get("flag") ?? "";
   if (flag.startsWith("regel:")) d = d.filter((r) => (r.regler ?? []).some((x) => x.key === flag.slice(6)));
@@ -216,7 +221,9 @@ function filter(all: Row[], p: URLSearchParams) {
   else if (cs === "med") d = d.filter((r) => caseStatus(r));
   else if (cs === "apne") d = d.filter((r) => { const s = caseStatus(r); return !!s && !s.startsWith("Avsluttet"); });
   else if (cs) d = d.filter((r) => caseStatus(r) === cs);
-  const sort = p.get("sort") || "priority", asc = p.get("dir") === "asc";
+  const asc = p.get("dir") === "asc";
+  let sort = p.get("sort") || "priority";
+  if (sort === "priority") sort = group ? "peer_percentile" : "percentile"; // ved lik poengsum går større kontrakter først
   return [...d].sort((a, b) => {
     const x = a[sort] as number | string | null, y = b[sort] as number | string | null;
     if (x == null) return 1; if (y == null) return -1;
@@ -263,10 +270,11 @@ export async function exportCsv(params: Record<string, unknown>) {
   const { rows } = await load();
   const p = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
   const cols = ["id", "pub_date", "title", "buyer", "region", "sector", "method", "num_bidders", "est_value", "award_value",
-    "priority", "percentile", "tier", "cri", "klagerisiko"];
+    "priority", "percentile", "tier", "peer_group", "peer_percentile", "peer_tier", "cri", "klagerisiko"];
   // Kolonnenavnene sier at prioritet og klagerisiko er rangeringer, ikke sannsynligheter
   const head: Record<string, string> = { priority: "prioritet_poeng", percentile: "prioritet_persentil_nasjonalt",
-    tier: "prioritetsnivå_relativt", klagerisiko: "klagerisiko_persentil" };
+    tier: "prioritetsnivå_relativt", klagerisiko: "klagerisiko_persentil", peer_group: "sammenligningsgruppe",
+    peer_percentile: "prioritet_persentil_i_gruppe", peer_tier: "prioritetsnivå_i_gruppe" };
   const lines = [[...cols.map((c) => head[c] ?? c), "leverandører", "observasjoner", "sak"].join(";")];
   for (const r of filter(rows, p)) {
     lines.push([...cols.map((c) => nb(r[c])), r.winner_names.join(", "), r.flags.map((f) => f.label).join(", "), caseStatus(r) ?? ""]

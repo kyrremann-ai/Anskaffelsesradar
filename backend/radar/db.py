@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS ted_competition (
 CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
+    peer_group TEXT, peer_percentile REAL, peer_tier TEXT,  -- rangering innen oppdragsgivertype × sektor
     cri REAL, klagerisiko REAL,
     repeat_pair_count REAL, prev_contract REAL, winner_market_share_pct REAL,
     award_over_estimate_pct REAL, data_coverage INTEGER,
@@ -172,6 +173,9 @@ def connect(path: Path) -> sqlite3.Connection:
         con.execute("ALTER TABLE politicians DROP COLUMN parti")
         con.commit()
         con.execute("VACUUM")  # så de slettede verdiene ikke blir liggende i ledige sider
+    for c, t in (("peer_group", "TEXT"), ("peer_percentile", "REAL"), ("peer_tier", "TEXT")):  # sammenligningsgruppe, fra v2.5
+        if c not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:
+            con.execute(f"ALTER TABLE scores ADD COLUMN {c} {t}")
     if "regler" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # faste kontrollpunkter, fra v2.5
         con.execute("ALTER TABLE scores ADD COLUMN regler TEXT")
     cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
