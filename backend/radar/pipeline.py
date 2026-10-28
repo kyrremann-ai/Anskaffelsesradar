@@ -13,7 +13,7 @@ import traceback
 
 from . import db
 from .config import settings
-from .ingest import brreg, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .observasjon import link
 from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
@@ -58,7 +58,7 @@ def load_demo(con) -> dict:
 
 
 def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
-    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA, bemanningsregister)."""
+    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA, bemanningsregister, fakturadata)."""
     d, out = settings.import_dir, {}
     if not d.exists():
         return out
@@ -82,6 +82,9 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
         rows = registers.parse(f.read_bytes())
         registers.store(con, "bemanning", rows)
         out["Bemanningsregisteret"] = len(rows)
+    # Kundens fakturadata (bare i kundens database)
+    for f in sorted([*d.glob("faktura*.csv"), *d.glob("faktura*.xlsx")]):
+        out["Fakturadata"] = out.get("Fakturadata", 0) + faktura.import_file(con, f, log=_log)
     kf = sorted([*d.glob("kofa*.csv"), *d.glob("kofa*.json")])
     for f in kf:
         kofa.store(con, kofa.parse(f.read_text(encoding="utf-8-sig")))

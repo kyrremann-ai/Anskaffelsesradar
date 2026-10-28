@@ -2,7 +2,7 @@
 // Kontraktsdata leses fra contracts.json/cards.json/meta.json som publiseres sammen med siden
 // (laget av `python -m radar.export_static`). Oversikt, filtre og lister regnes ut her.
 // Saker lagres i artifactens database (db-kapabiliteten), så de deles mellom brukerne.
-import type { Case, CaseEvent, ContractRow, Group, Stats, SupplierCard } from "./api";
+import type { Case, CaseEvent, ContractRow, Group, InvoiceResult, Stats, SupplierCard } from "./api";
 
 type Row = ContractRow & Record<string, unknown> & { winner: string | null };
 type Card = SupplierCard & { links: { orgnr: string; name: string; via: string; rolle: string; is_buyer: boolean }[] };
@@ -13,7 +13,7 @@ declare global { interface Window { claude?: { use(name: string): Promise<any> }
 
 class HttpError extends Error {}
 
-let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string }> | null = null;
+let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string; invoices: InvoiceResult }> | null = null;
 const getJson = (f: string) => fetch(f).then((r) => {
   if (!r.ok) throw new HttpError(`Fant ikke ${f}`);
   return r.json();
@@ -27,7 +27,8 @@ function load() {
       Promise.all(parts.contracts.map(getJson)).then((xs) => xs.flat()),
       Promise.all(parts.cards.map(getJson)).then((xs) => Object.assign({}, ...xs)),
     ]);
-    return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined };
+    return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined,
+      invoices: (m.invoices ?? { rows: [], period: null, radar_from: null }) as InvoiceResult };
   });
   return data;
 }
@@ -349,6 +350,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       .sort((a, b) => a.name.localeCompare(b.name, "nb"));
   }
   if (path === "/api/summary") return summary(rows, p.get("buyers"));
+  if (path === "/api/invoices") {
+    const inv = (await load()).invoices, b = p.get("buyers");
+    return b ? { ...inv, rows: inv.rows.filter((r) => b.split(",").includes(r.buyer_id)) } : inv;
+  }
   if (path === "/api/contracts") {
     const d = filter(rows, p), limit = +(p.get("limit") || 50), page = +(p.get("page") || 1);
     return { rows: d.slice((page - 1) * limit, page * limit).map(rowOut), total: d.length };

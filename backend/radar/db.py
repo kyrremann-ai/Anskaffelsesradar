@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS observasjon (
     cn_accelerated INTEGER            -- akselerert frist oppgitt i konkurransekunngjøringen
 );
 
+-- Kundens fakturadata. Bare i kundens database; sendes aldri til språkmodell eller eksporteres linje for linje.
+CREATE TABLE IF NOT EXISTS invoices (
+    buyer_id TEXT, supplier_orgnr TEXT, supplier_name TEXT, amount REAL, date TEXT, account TEXT, invoice_no TEXT, source_file TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_invoices ON invoices(buyer_id, supplier_orgnr);
+
 -- Konkurransekunngjøringer fra TED (bare fristen), koblet til tildelingene via prosedyre-ID
 CREATE TABLE IF NOT EXISTS ted_competition (
     procedure_id TEXT PRIMARY KEY,
