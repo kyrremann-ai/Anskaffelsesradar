@@ -89,3 +89,25 @@ def test_link_helpers():
     assert h is hits[1] and score >= 0.5
     row = kl.hit_row(h)
     assert row["winner_ids"] == [] and row["tender_duration_days"] == 31 and row["id"] == "doffin-2025-1"
+
+
+def test_klagerisiko(tmp_path):
+    import json as _json
+    from radar import klagerisiko as kr
+    rng = np.random.default_rng(0)
+
+    def hit(i, big):
+        return {"id": f"2025-{i}", "type": kr.COMPETITION, "issueDate": f"202{4 + i % 2}-03-01T00:00:00Z",
+                "deadline": f"202{4 + i % 2}-04-{10 if big else 1:02d}T00:00:00Z", "heading": "Rammeavtale renhold",
+                "description": "x" * int(rng.integers(10, 500)), "cpvCodes": ["90910000"], "lots": [{}] * (3 if big else 1),
+                "estimatedValue": {"amount": float(5e7 if big else 5e5), "currencyCode": "NOK"},
+                "buyer": [{"name": f"Kommune {i % 30}"}]}
+    link = {f"2025/{i}": {"score": 1, "hit": hit(i, True)} for i in range(40)}
+    sample = {h["id"]: h for h in (hit(i, rng.random() < 0.2) for i in range(100, 400))}
+    (tmp_path / "l.json").write_text(_json.dumps(link))
+    (tmp_path / "s.json").write_text(_json.dumps({"months": [], "hits": sample}))
+    f = kr.features(hit(1, True))
+    assert f["tender_days"] == 40 and f["n_lots"] == 3 and f["buyer_kommune"] == 1.0 and f["framework"] == 1.0
+    r = kr.evaluate(tmp_path / "l.json", tmp_path / "s.json")
+    assert r["positive"] == 40 and r["models"][0]["auc"] > 0.7
+    assert "AUC siste år" in kr.table(r)
