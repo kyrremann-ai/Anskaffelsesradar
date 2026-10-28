@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type Meta, type SupplierCard } from "../lib/api";
+import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, nok, pct, signedPct } from "../lib/format";
 import { Button, Meter, Skeleton, TierBadge, cx, scoreColor } from "./ui";
@@ -67,6 +67,8 @@ function FlagList({ flags }: { flags: Flag[] }) {
                     {!dq && <span className="num shrink-0 text-xs text-muted">vekt {f.weight.toLocaleString("nb-NO")}</span>}
                   </div>
                   {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{f.why}</div>}
+                  {f.data_note && <div className="mt-0.5 pl-5 text-xs text-mid">{f.data_note}</div>}
+                  {f.checks?.length ? <Checks checks={f.checks} /> : null}
                 </li>
               ))}
             </ul>
@@ -74,6 +76,28 @@ function FlagList({ flags }: { flags: Flag[] }) {
         );
       })}
     </div>
+  );
+}
+
+const CHECK_MARK: Record<FlagCheck["status"], [string, string]> = {
+  ok: ["✓", "sjekket"], justert: ["≈", "justert"], forklarer: ["–", "forklart, teller ikke"],
+  svekker: ["½", "kan forklare, halv vekt"], ukjent: ["?", "data mangler"],
+};
+
+// Alternative forklaringer som er sjekket for leverandørflagget, med svaret dataene gir
+function Checks({ checks }: { checks: FlagCheck[] }) {
+  return (
+    <details className="mt-1 pl-5 text-xs text-muted">
+      <summary className="cursor-pointer">Alternative forklaringer ({checks.length})</summary>
+      <ul className="mt-1 space-y-0.5">
+        {checks.map((c, i) => (
+          <li key={i} title={CHECK_MARK[c.status][1]}>
+            <span className="num inline-block w-4" aria-label={CHECK_MARK[c.status][1]}>{CHECK_MARK[c.status][0]}</span>
+            <span className="text-fg">{c.q}</span> {c.a}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

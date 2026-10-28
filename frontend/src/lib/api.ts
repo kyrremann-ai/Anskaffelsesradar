@@ -11,7 +11,9 @@ export const queryClient = new QueryClient({
 if (STATIC) onCasesChange(() => queryClient.invalidateQueries());
 
 export type Tier = "Høy" | "Forhøyet" | "Lav";
-export type Flag = { key: string; label: string; weight: number; source: string; why?: string };
+// checks: alternative forklaringer som er sjekket (leverandørflagg). data_note: hva som mangler i dataene.
+export type FlagCheck = { q: string; status: "ok" | "justert" | "forklarer" | "svekker" | "ukjent"; a: string };
+export type Flag = { key: string; label: string; weight: number; source: string; why?: string; checks?: FlagCheck[]; data_note?: string };
 
 export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;

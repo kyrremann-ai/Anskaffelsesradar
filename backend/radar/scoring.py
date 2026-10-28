@@ -26,6 +26,7 @@ from . import klagerisiko
 from .db import set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
+from .supplier_context import SupplierContext
 from .synthetic import training_set
 
 FEATURES = [
@@ -192,14 +193,17 @@ def score_all(con, log=print) -> int:
         return 0
     brreg = BrregIndex(con)
     extra = ExtraIndex(con, brreg.ent)
+    context = SupplierContext(con, brreg, extra)
     suppliers_by_buyer = df.explode("winner_ids").groupby("buyer_id").winner_ids.agg(lambda s: set(s.dropna())).to_dict()
     flags, cri, bboost = [], [], []
     for r in df.itertuples():
         fl = rule_flags(r)
         c = {"id": r.id, "buyer_id": r.buyer_id, "winner_ids": r.winner_ids, "pub_date": r.pub_date, "cpv": r.cpv,
-             "award_value": r.award_value, "est_value": r.est_value}
+             "award_value": r.award_value, "est_value": r.est_value, "framework": bool(r.framework),
+             "contract_months": None if pd.isna(r.contract_months) else r.contract_months}
         others = suppliers_by_buyer.get(r.buyer_id, set())
-        bf = brreg.flags(c, others) + extra.flags(c, others)
+        # Leverandørflaggene sjekkes mot alternative forklaringer (flerårig verdi, rammeavtale, konsern, tidspunkt, samme enhet)
+        bf = context.apply(c, brreg.flags(c, others) + extra.flags(c, others), others)
         flags.append(fl + bf)
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
         bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))

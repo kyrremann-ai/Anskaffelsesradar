@@ -91,6 +91,16 @@ export default function Method() {
               <li>Teller ikke i prioriteten før revisorenes vurderinger viser at den treffer.</li>
             </ul>
           </Card>)}
+        <Card title="Leverandørflagg: alternative forklaringer" desc="Sjekkes før flagget vises. Svarene står under hvert flagg i saksmappen.">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Flerårig kontrakt mot ett års omsetning:</b> verdien deles på varigheten (årlig verdi) og sammenlignes med regnskapet fra tildelingsåret. Uten oppgitt varighet står det i flagget.</li>
+            <li><b>Rammeavtale:</b> med flere leverandører deles verdien likt (faktisk fordeling er ukjent). Med én leverandør er verdien ofte en øvre ramme, og flagget får halv vekt.</li>
+            <li><b>Konsern:</b> datterselskap (≥ 50 % eid av et selskap) eller morselskap med konsernregnskap gir halv vekt på omsetnings- og ansatteflagget. Felles roller, eiere eller adresse innenfor samme konsern teller ikke.</li>
+            <li><b>Tidspunkt:</b> Brregs endringslogg avgjør om adresse, ansatte og roller var de samme ved tildeling. Adresse endret etter tildeling gir halv vekt. Uten logg står det «nåværende data» i flagget.</li>
+            <li><b>Samme juridiske enhet:</b> hovedenhet og underenhet, registrert fusjon/fisjon/omdanning (fil) og slettet enhet med samme navn regnes ikke som to leverandører.</li>
+          </ul>
+          <p className="mt-2 text-xs text-muted">Mangler data, sier flagget hva som mangler i stedet for å gjette. Vekten endres ikke av manglende data.</p>
+        </Card>
         <Card title="Personopplysninger og rettslig grunnlag" desc="Gjelder aksjonærregisteret, kandidatlister og roller i Brreg">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>

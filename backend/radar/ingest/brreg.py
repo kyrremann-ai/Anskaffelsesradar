@@ -171,7 +171,9 @@ def entity_summary(data: dict) -> dict:
         "orgform": (data.get("organisasjonsform") or {}).get("kode"),
         "stiftet": data.get("stiftelsesdato") or data.get("registreringsdatoEnhetsregisteret"),
         "nace": nace, "nace_seksjon": nace_section(nace), "nace_tekst": (data.get("naeringskode1") or {}).get("beskrivelse"),
-        "ansatte": data.get("antallAnsatte"), "mva": data.get("registrertIMvaregisteret"),
+        "ansatte": data.get("antallAnsatte"),
+        # True uten antall: virksomheten har ansatte i Aa-registeret, men Brreg viser ikke tallet
+        "har_ansatte": data.get("harRegistrertAntallAnsatte"), "mva": data.get("registrertIMvaregisteret"),
         "konkurs": bool(data.get("konkurs")), "under_avvikling": bool(data.get("underAvvikling")),
         "tvangsavvikling": bool(data.get("underTvangsavviklingEllerTvangsopplosning")),
         "slettedato": data.get("slettedato"), "kommunenr": adr.get("kommunenummer"),
