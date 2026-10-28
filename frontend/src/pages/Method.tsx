@@ -17,6 +17,7 @@ const KR_LABELS: Record<string, string> = {
 const STATUS: Record<string, [string, string]> = {
   ok: ["Hentet", "text-lo"], demo: ["Demodata", "text-mid"], av: ["Ikke satt opp", "text-muted"], feil: ["Feil", "text-hi"],
 };
+const w1 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const f3 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 export default function Method() {
@@ -29,7 +30,7 @@ export default function Method() {
   return (
     <div>
       <PageHead title="Modell og metode"
-        desc="Prioriteten bygger på regelbaserte røde flagg: Fazekas sin korrupsjonsrisikoindeks (CRI) fra kunngjøringen, og flagg fra Brreg og tilleggskildene. Ved siden av vises klagerisiko, en modell trent på ekte KOFA- og Doffin-data." />
+        desc="Prioriteten bygger på regelbaserte røde flagg: Fazekas’ korrupsjonsrisikoindeks (CRI) fra kunngjøringen, og flagg fra Brreg og tilleggskildene. Ved siden av vises klagerisiko, en modell trent på ekte KOFA- og Doffin-data." />
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="Hva telles: observasjonsenhet" desc="Svaret på «hva er én rad?», før totalsummene brukes">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
@@ -102,7 +103,7 @@ export default function Method() {
         </Card>
         <Card title="Røde flagg fra kunngjøringen" desc="Vekter fra Fazekas et al. (2013), som i rapporten">
           <ul className="divide-y divide-line text-sm">{m.flags.map((f) => (
-            <li key={f.key} className="flex justify-between py-1.5"><span>{f.label}</span><span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
+            <li key={f.key} className="flex justify-between py-1.5"><span>{f.label}</span><span className="num text-muted">{w1(f.weight)}</span></li>))}
           </ul>
           <p className="mt-2 text-xs text-muted">Flaggene beskriver hva kunngjøringen viser, ikke en tolkning. «Ett registrert tilbud» krever at kunngjøringen oppgir ett tilbud. Direkte tildeling har eget flagg. Overskridelse på rammeavtaler får halv vekt, fordi de ofte oppgir maksverdi.</p>
         </Card>
@@ -126,7 +127,7 @@ export default function Method() {
         <Card title="Flagg fra tilleggskildene" desc="Personer matches på navn og fødselsår. Treff er mulige koblinger og må verifiseres.">
           <ul className="divide-y divide-line text-sm">{(m.extra_flags ?? []).map((f) => (
             <li key={f.key} className="flex justify-between gap-3 py-1.5"><span>{f.label}<span className="block text-xs text-muted">{f.source}</span></span>
-              <span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
+              <span className="num text-muted">{w1(f.weight)}</span></li>))}
           </ul>
         </Card>
         {m.klagerisiko && (

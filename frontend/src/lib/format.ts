@@ -25,3 +25,6 @@ export function dateTime(s: string | null | undefined): string {
 }
 
 export const MONTHS = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
+
+/** Datoer i fritekst fra backend (2025-06-01) vises som i resten av appen (1. juni 2025). */
+export const isoDatesInText = (s: string) => s.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (d) => date(d));

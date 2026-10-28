@@ -8,6 +8,7 @@ import asyncio
 import html
 import io
 import json
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -53,10 +54,18 @@ app = FastAPI(title="Anskaffelsesradar", version="2.0", lifespan=lifespan)
 # ---------------------------------------------------------------- data i minnet
 
 _cache: dict = {"key": None, "df": None, "brreg": None}
+# Synkrone endepunkter kjører i en trådpool og deler én SQLite-tilkobling. Uten lås kan to samtidige
+# lesinger flette radene (doble kontrakter i listene, sporadiske 500-feil første gang siden lastes).
+_frame_lock = threading.Lock()
 
 
 def frame() -> pd.DataFrame:
     """Kontrakter + scorer + saksstatus som én DataFrame. Basen bygges på nytt bare når data er oppdatert."""
+    with _frame_lock:
+        return _frame()
+
+
+def _frame() -> pd.DataFrame:
     key = db.get_meta(con, "updated_at")
     if _cache["key"] != key or _cache["df"] is None:
         df = contracts_frame(con)

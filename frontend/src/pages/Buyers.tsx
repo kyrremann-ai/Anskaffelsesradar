@@ -20,7 +20,7 @@ export default function Buyers() {
   return (
     <div>
       <PageHead title="Oppdragsgivere"
-        desc={`Risikoprofil for ${int(s.by_buyer.length)} oppdragsgivere${mine.length ? "" : " med minst 8 tildelinger"}. Mønstre over tid sier mer enn enkeltkontrakter.`} />
+        desc={`Konkurranse og flagg for ${int(s.by_buyer.length)} oppdragsgivere${mine.length ? "" : " med minst 8 tildelinger"}. Mønstre over tid sier mer enn enkeltkontrakter.`} />
       <Card title="Konkurranse per oppdragsgiver" desc="Andel direkte tildelinger mot andel med ett tilbud. Størrelse = antall kontrakter." className="mb-4">
         <div className="h-72">
           <ResponsiveContainer>
@@ -41,9 +41,9 @@ export default function Buyers() {
       </Card>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Search value={q} onChange={setQ} placeholder="Søk oppdragsgiver" />
-        <div className="flex gap-1 text-xs">
+        <div className="flex flex-wrap gap-1 text-xs" role="group" aria-label="Sorter etter">
           {SORTS.map(([k, l]) => (
-            <button key={k} onClick={() => setSort(k)} className={cx("rounded-md px-2.5 py-1.5", sort === k ? "bg-accent text-surface" : "bg-sunk text-muted")}>{l}</button>
+            <button key={k} onClick={() => setSort(k)} aria-pressed={sort === k} className={cx("rounded-md px-2.5 py-2", sort === k ? "bg-accent text-surface" : "bg-sunk text-muted hover:text-fg")}>{l}</button>
           ))}
         </div>
       </div>
@@ -51,12 +51,12 @@ export default function Buyers() {
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-sunk text-left text-xs text-muted">
             <tr>{["Oppdragsgiver", "Kontrakter", "Flagget", "Ett tilbud", "Direkte", "Tildelt verdi", "Snittprioritet", ""].map((h, i) =>
-              <th key={i} className={cx("whitespace-nowrap px-3 py-2.5 font-medium", i > 0 && i < 6 && "text-right")}>{h}</th>)}</tr>
+              <th key={i} className={cx("whitespace-nowrap px-3 py-2.5 font-medium", i > 0 && i < 6 && "text-right", i === 0 && "sticky left-0 z-10 bg-sunk")}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((b) => (
-              <tr key={b.buyer_id} className="border-t border-line hover:bg-sunk">
-                <td className="px-3 py-2"><Link to={`/arbeid`} onClick={() => setBuyers([b.buyer_id!])} className="font-medium hover:underline" title="Sett som mine enheter og åpne arbeidsflaten">{b.name}</Link></td>
+              <tr key={b.buyer_id} className="group border-t border-line hover:bg-sunk">
+                <td className="sticky left-0 z-10 max-w-[45vw] bg-surface px-3 py-2 group-hover:bg-sunk sm:max-w-none"><Link to={`/arbeid`} onClick={() => setBuyers([b.buyer_id!])} className="font-medium hover:underline" title="Sett som mine enheter og åpne arbeidsflaten">{b.name}</Link></td>
                 <td className="num px-3 text-right">{int(b.n)}</td>
                 <td className="num px-3 text-right">{int(b.n_flagged)}</td>
                 <td className="num px-3 text-right">{pct(b.single_bid_pct, 0)}</td>
@@ -64,7 +64,7 @@ export default function Buyers() {
                 <td className="num whitespace-nowrap px-3 text-right">{nok(b.total_value)}</td>
                 <td className="px-3"><div className="flex items-center gap-2"><Meter value={b.avg_score} className="w-20" /><span className="num text-xs">{Math.round(b.avg_score)}</span></div></td>
                 <td className="px-3 text-right">
-                  <button className="whitespace-nowrap text-xs text-accent hover:underline"
+                  <button className="-my-1 whitespace-nowrap rounded px-2 py-1.5 text-xs text-accent hover:underline"
                     onClick={() => setBuyers(mine.includes(b.buyer_id!) ? mine.filter((x) => x !== b.buyer_id) : [...mine, b.buyer_id!])}>
                     {mine.includes(b.buyer_id!) ? "Fjern fra mine" : "Legg til i mine"}
                   </button>

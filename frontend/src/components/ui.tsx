@@ -68,14 +68,16 @@ export function CheckBadge({ label, why }: { label: string; why?: string }) {
   return <span title={why ? `${label}: ${why}` : label} className="inline-block whitespace-nowrap rounded border border-hi/40 px-1.5 py-0.5 text-xs text-hi">◆ {label}</span>;
 }
 
-export function scoreColor(v: number) {
-  return v >= 60 ? "var(--hi)" : v >= 40 ? "var(--mid)" : "var(--lo)";
+// Tallet får samme farge som nivået, så «17» ikke blir grønn ved siden av «Forhøyet prioritet»
+const TIER_COLOR: Record<string, string> = { "Høy": "var(--hi)", "Forhøyet": "var(--mid)", "Lav": "var(--muted)" };
+export function tierColor(tier: Tier | string) {
+  return TIER_COLOR[tier] ?? "var(--muted)";
 }
 
 export function Meter({ value, max = 100, color, className }: { value: number; max?: number; color?: string; className?: string }) {
   return (
     <div className={cx("h-1.5 rounded bg-sunk", className)} aria-hidden>
-      <div className="h-1.5 rounded" style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color ?? scoreColor(value) }} />
+      <div className="h-1.5 rounded" style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color ?? "var(--accent)" }} />
     </div>
   );
 }
@@ -94,7 +96,7 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="p-8 text-center text-sm text-muted">{children}</div>;
+  return <div className="mx-auto max-w-2xl p-8 text-center text-sm text-muted">{children}</div>;
 }
 
 export function Select({ value, onChange, items, placeholder, label }: {
@@ -102,7 +104,7 @@ export function Select({ value, onChange, items, placeholder, label }: {
 }) {
   return (
     <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border border-line bg-surface px-2 text-sm">
+      className="h-9 w-full min-w-0 rounded-md border border-line bg-surface px-2 text-sm sm:w-auto sm:max-w-[18rem]">
       <option value="">{placeholder}</option>
       {items.map((i) => <option key={i.v} value={i.v}>{i.l}</option>)}
     </select>
