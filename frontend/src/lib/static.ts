@@ -144,6 +144,7 @@ function filter(all: Row[], p: URLSearchParams) {
   const cs = p.get("case_status");
   if (cs === "uten") d = d.filter((r) => !caseStatus(r));
   else if (cs === "med") d = d.filter((r) => caseStatus(r));
+  else if (cs === "apne") d = d.filter((r) => { const s = caseStatus(r); return !!s && !s.startsWith("Avsluttet"); });
   else if (cs) d = d.filter((r) => caseStatus(r) === cs);
   const sort = p.get("sort") || "priority", asc = p.get("dir") === "asc";
   return [...d].sort((a, b) => {
