@@ -1,0 +1,16 @@
+{$DOMAIN:localhost} {
+	encode gzip
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+	# Brukernavnet sendes videre, så saksloggen viser hvem som endret hva
+	reverse_proxy app:8000 {
+		header_up X-Remote-User {http.auth.user.id}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+}
