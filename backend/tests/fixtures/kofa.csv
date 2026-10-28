@@ -1,0 +1,4 @@
+saksnr;dato;innklaget;innklaget_orgnr;leverandor;tittel;brudd;ulovlig_direkte;url
+2025/0101;2025-06-01;Testby kommune;944444444;Rent og Pent AS;Renhold kommunale bygg;ja;ja;https://www.kofa.no/saker/2025-0101
+2025/0102;2025-06-01;Annen kommune;;Noen AS;Helt annet;nei;nei;
+;2025-06-01;Mangler saksnr;;;;ja;;

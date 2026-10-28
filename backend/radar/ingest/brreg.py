@@ -103,12 +103,14 @@ def roles_from_api(orgnr: str, roller: dict | None, salt: str) -> list[dict]:
                 navn = " ".join(filter(None, [n.get("fornavn"), n.get("mellomnavn"), n.get("etternavn")]))
                 out.append({"orgnr": orgnr, "rolle": code, "rolle_navn": ROLE_CODES[code], "type": "person",
                             "person_key": person_key(navn, p.get("fodselsdato", ""), salt), "navn": navn,
-                            "er_doed": int(bool(p.get("erDoed")))})
+                            "er_doed": int(bool(p.get("erDoed"))),
+                            "fodselsaar": int(p["fodselsdato"][:4]) if p.get("fodselsdato") else None})
             elif e := r.get("enhet"):
                 navn = e.get("navn")
                 navn = " ".join(navn) if isinstance(navn, list) else navn
                 out.append({"orgnr": orgnr, "rolle": code, "rolle_navn": ROLE_CODES[code], "type": "enhet",
-                            "person_key": f"org:{e.get('organisasjonsnummer')}", "navn": navn, "er_doed": 0})
+                            "person_key": f"org:{e.get('organisasjonsnummer')}", "navn": navn, "er_doed": 0,
+                            "fodselsaar": None})
     return out
 
 
@@ -119,8 +121,8 @@ def store(con, recs: list[dict], salt: str) -> None:
                         (rec["orgnr"], now(), json.dumps({"kind": rec["kind"], **(rec["enhet"] or {})}, ensure_ascii=False)))
             con.execute("DELETE FROM brreg_roles WHERE orgnr=?", (rec["orgnr"],))
             con.executemany(
-                "INSERT INTO brreg_roles(orgnr, rolle, rolle_navn, type, person_key, navn, er_doed) VALUES (?,?,?,?,?,?,?)",
-                [(r["orgnr"], r["rolle"], r["rolle_navn"], r["type"], r["person_key"], r["navn"], r["er_doed"])
+                "INSERT INTO brreg_roles(orgnr, rolle, rolle_navn, type, person_key, navn, er_doed, fodselsaar) VALUES (?,?,?,?,?,?,?,?)",
+                [(r["orgnr"], r["rolle"], r["rolle_navn"], r["type"], r["person_key"], r["navn"], r["er_doed"], r["fodselsaar"])
                  for r in roles_from_api(rec["orgnr"], rec["roller"], salt)])
 
 
@@ -153,8 +155,9 @@ def load_demo(con, entities: list[dict], roles: list[dict], salt: str) -> None:
                         (e["organisasjonsnummer"], now(), json.dumps({"kind": "enhet", **e}, ensure_ascii=False)))
         con.execute("DELETE FROM brreg_roles")
         con.executemany(
-            "INSERT INTO brreg_roles(orgnr, rolle, rolle_navn, type, person_key, navn, er_doed) VALUES (?,?,?,?,?,?,?)",
-            [(r["orgnr"], r["rolle"], ROLE_CODES[r["rolle"]], "person", person_key(r["person"], "", salt), r["person"], 0)
+            "INSERT INTO brreg_roles(orgnr, rolle, rolle_navn, type, person_key, navn, er_doed, fodselsaar) VALUES (?,?,?,?,?,?,?,?)",
+            [(r["orgnr"], r["rolle"], ROLE_CODES[r["rolle"]], "person", person_key(r["person"], str(r.get("year", "")), salt),
+              r["person"], 0, r.get("year"))
              for r in roles])
 
 

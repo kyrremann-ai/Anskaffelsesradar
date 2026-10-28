@@ -1,13 +1,19 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Meter, PageHead, Skeleton } from "../components/ui";
-import { useApi } from "../lib/api";
+import { useApi, type SourceStatus } from "../lib/api";
+import { dateTime } from "../lib/format";
 
 type Model = {
-  train: { n: number; positives: number; seed: number; synthetic: boolean };
+  train: { n: number; positives: number; seed: number; synthetic: boolean; kofa?: number };
   metrics: { name: string; auc: number; cv_auc: number; cv_sd: number; recall: number; roc: [number, number][] }[];
   importance: { feature: string; value: number }[]; features: string[]; excluded: string[];
   weights: { ml: number; cri: number; anomaly: number; brreg_per_weight: number; brreg_cap: number } | null;
   flags: { key: string; label: string; weight: number }[];
+  extra_flags: { key: string; label: string; weight: number; source: string }[];
+  sources: Record<string, SourceStatus>;
+};
+const STATUS: Record<string, [string, string]> = {
+  ok: ["Hentet", "text-lo"], demo: ["Demodata", "text-mid"], av: ["Ikke satt opp", "text-muted"], feil: ["Feil", "text-hi"],
 };
 const COLORS = ["var(--accent)", "var(--mid)", "var(--hi)"];
 const f3 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -23,8 +29,8 @@ export default function Method() {
       <PageHead title="Modell og metode"
         desc="Tre klassifikatorer, røde flagg fra Fazekas sin korrupsjonsrisikoindeks (CRI), avviksdeteksjon og Brreg-flagg, kombinert til én prioritet. Bygget på eksamensrapporten «Detecting Corruption in Public Procurement Using Machine Learning» (Foros, 2026)." />
       <div className="mb-4 rounded-md border border-mid/40 bg-mid-soft p-4 text-sm text-mid">
-        <strong>Viktig:</strong> Modellene er trent på {m.train.n.toLocaleString("nb-NO")} syntetiske anbud ({m.train.positives} merket mistenkelige), som i rapporten.
-        Treffsikkerheten under gjelder syntetiske data og sier ikke hvor godt modellen treffer på ekte kontrakter. Neste steg er å trene på ekte fasit fra KOFA-avgjørelser.
+        <strong>Viktig:</strong> Modellene er trent på {(m.train.n - (m.train.kofa ?? 0)).toLocaleString("nb-NO")} syntetiske anbud ({m.train.positives} merket mistenkelige), som i rapporten.
+        Treffsikkerheten under gjelder syntetiske data og sier ikke hvor godt modellen treffer på ekte kontrakter. {m.train.kofa ? ` I tillegg brukes ${m.train.kofa} kontrakter koblet til KOFA-avgjørelser${m.sources?.KOFA?.status === "demo" ? " (demodata)" : ""}.` : " Neste steg er å trene på ekte fasit fra KOFA-avgjørelser."}
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <Card title="Modellytelse på holdout-testsett" desc={`Seed ${m.train.seed}, 25 % holdout, 5-fold stratifisert CV`}>
@@ -64,9 +70,9 @@ export default function Method() {
             <li><b>ML-score</b> (0–100): snittet av tre modeller (logistisk regresjon, Random Forest, Gradient Boosting).</li>
             <li><b>CRI</b> (0–100): sum av vektene for utløste røde flagg fra kunngjøringen, delt på maks mulig sum.</li>
             <li><b>Avvik</b> (0–100): Isolation Forest på de samme feltene. Fanger uvanlige kombinasjoner som reglene ikke dekker.</li>
-            <li><b>Brreg-tillegg</b>: {w?.brreg_per_weight ?? 8} poeng per vektpoeng i Brreg-flaggene, maks {w?.brreg_cap ?? 20}.</li>
+            <li><b>Register-tillegg</b>: {w?.brreg_per_weight ?? 8} poeng per vektpoeng i flaggene fra Brreg og tilleggskildene, maks {w?.brreg_cap ?? 20}.</li>
           </ol>
-          <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = ({w?.ml ?? 0.6} × ML + {w?.cri ?? 0.25} × CRI + {w?.anomaly ?? 0.15} × avvik + Brreg) / 1,2</p>
+          <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = ({w?.ml ?? 0.6} × ML + {w?.cri ?? 0.25} × CRI + {w?.anomaly ?? 0.15} × avvik + register) / 1,2</p>
           <p className="mt-2 text-sm text-muted">Høy prioritet = topp 5 % nasjonalt, forhøyet = persentil 80–95. Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
         </Card>
         <Card title="Røde flagg fra kunngjøringen" desc="Vekter fra Fazekas et al. (2013), som i rapporten">
@@ -74,6 +80,29 @@ export default function Method() {
             <li key={f.key} className="flex justify-between py-1.5"><span>{f.label}</span><span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
           </ul>
           <p className="mt-2 text-xs text-muted">«Ingen reell konkurranse» gjelder både kontrakter med ett tilbud og direkte tildelinger uten oppgitt tilbudstall. Overskridelse på rammeavtaler får halv vekt, fordi de ofte oppgir maksverdi.</p>
+        </Card>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card title="Datakilder" desc="Status fra siste oppdatering. En kilde som feiler stopper ikke de andre.">
+          <ul className="divide-y divide-line text-sm">
+            {Object.entries(m.sources ?? {}).map(([k, s]) => (
+              <li key={k} className="flex items-center justify-between gap-3 py-1.5">
+                <span>{k}{s.note && <span className="ml-1 text-xs text-muted">({s.note})</span>}</span>
+                <span className="text-right text-xs">
+                  <span className={STATUS[s.status]?.[1]}>{STATUS[s.status]?.[0] ?? s.status}</span>
+                  {s.rows != null && <span className="num ml-2 text-muted">{s.rows.toLocaleString("nb-NO")} rader</span>}
+                  {s.error && <span className="block text-hi" title={s.error}>{s.error.slice(0, 60)}</span>}
+                  <span className="block text-muted">{dateTime(s.at)}</span>
+                </span>
+              </li>))}
+            {!Object.keys(m.sources ?? {}).length && <li className="py-1.5 text-muted">Ingen oppdatering kjørt ennå.</li>}
+          </ul>
+        </Card>
+        <Card title="Flagg fra tilleggskildene" desc="Personer matches på navn og fødselsår. Treff er mulige koblinger og må verifiseres.">
+          <ul className="divide-y divide-line text-sm">{(m.extra_flags ?? []).map((f) => (
+            <li key={f.key} className="flex justify-between gap-3 py-1.5"><span>{f.label}<span className="block text-xs text-muted">{f.source}</span></span>
+              <span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
+          </ul>
         </Card>
       </div>
     </div>

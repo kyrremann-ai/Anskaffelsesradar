@@ -1,0 +1,8 @@
+[{"id": 1, "regnskapsperiode": {"fraDato": "2023-01-01", "tilDato": "2023-12-31"},
+  "resultatregnskapResultat": {"aarsresultat": 50000, "driftsresultat": {"driftsresultat": 80000, "driftsinntekter": {"sumDriftsinntekter": 900000}}},
+  "egenkapitalGjeld": {"egenkapital": {"sumEgenkapital": 100000}, "gjeldOversikt": {"sumGjeld": 400000}},
+  "eiendeler": {"sumEiendeler": 500000}},
+ {"id": 2, "regnskapsperiode": {"fraDato": "2024-01-01", "tilDato": "2024-12-31"},
+  "resultatregnskapResultat": {"aarsresultat": -250000, "driftsresultat": {"driftsresultat": -200000, "driftsinntekter": {"sumDriftsinntekter": 1200000}}},
+  "egenkapitalGjeld": {"egenkapital": {"sumEgenkapital": -150000}, "gjeldOversikt": {"sumGjeld": 700000}},
+  "eiendeler": {"sumEiendeler": 550000}}]

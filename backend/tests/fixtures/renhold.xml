@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Register xmlns="http://arbeidstilsynet.no/register">
+  <Virksomhet><Organisasjonsnummer>111111111</Organisasjonsnummer><Navn>Rent og Pent AS</Navn><Status>Godkjent</Status></Virksomhet>
+  <Virksomhet><Organisasjonsnummer>222 222 222</Organisasjonsnummer><Navn>Skinnende AS</Navn><Status>Ikke godkjent</Status></Virksomhet>
+  <Virksomhet><Navn>Uten orgnr</Navn><Status>Godkjent</Status></Virksomhet>
+</Register>

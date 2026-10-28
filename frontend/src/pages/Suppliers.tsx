@@ -87,6 +87,33 @@ export function SupplierPage() {
             <ul className="space-y-1 text-sm">{d.roles.map((r, i) => <li key={i} className="flex justify-between gap-3"><span>{r.navn}</span><span className="text-xs text-muted">{r.rolle_navn}</span></li>)}</ul>
           )}
         </Card>
+        <Card title="Regnskap" desc={d.regnskap?.aar ? `Regnskapsregisteret, ${d.regnskap.aar}` : "Regnskapsregisteret"}>
+          {!d.regnskap || d.regnskap.driftsinntekter == null ? <p className="text-sm text-muted">Ikke registrert eller ikke hentet.</p> : (
+            <dl className="space-y-1 text-sm">
+              {([["Driftsinntekter", d.regnskap.driftsinntekter], ["Driftsresultat", d.regnskap.driftsresultat], ["Årsresultat", d.regnskap.aarsresultat],
+                ["Egenkapital", d.regnskap.egenkapital], ["Gjeld", d.regnskap.gjeld]] as [string, number | null][])
+                .map(([k, v]) => <div key={k} className="flex justify-between gap-3"><dt className="text-muted">{k}</dt>
+                  <dd className={cx("num text-right", v != null && v < 0 && "text-hi")}>{nok(v)}</dd></div>)}
+            </dl>
+          )}
+        </Card>
+        <Card title="Eiere" desc="Aksjonærregisteret (Skatteetaten) eller Proff">
+          {!d.owners.length ? <p className="text-sm text-muted">Ingen eierdata importert.</p> : (
+            <ul className="space-y-1 text-sm">{d.owners.map((o, i) => (
+              <li key={i} className="flex justify-between gap-3">
+                {o.orgnr ? <Link to={`/leverandorer/${o.orgnr}`} className="hover:underline">{o.name}</Link> : <span>{o.name}</span>}
+                <span className="num text-xs text-muted">{o.share_pct != null ? `${o.share_pct.toLocaleString("nb-NO")} %` : "–"}</span>
+              </li>))}
+            </ul>
+          )}
+        </Card>
+        <Card title="Registre og lister">
+          <dl className="space-y-1 text-sm">
+            {Object.entries(d.registers).map(([k, v]) => <div key={k} className="flex justify-between gap-3"><dt className="text-muted capitalize">{k}sregisteret</dt><dd>{v}</dd></div>)}
+            <div className="flex justify-between gap-3"><dt className="text-muted">OpenSanctions</dt>
+              <dd className={cx(d.sanctions && "text-hi")}>{d.sanctions ? d.sanctions.datasets : "Ingen treff"}</dd></div>
+          </dl>
+        </Card>
         <Card title="Koblinger via personer" desc="Andre virksomheter der samme personer har kontrollroller">
           {!d.links.length ? <p className="text-sm text-muted">Ingen koblinger funnet.</p> : (
             <ul className="space-y-1.5 text-sm">

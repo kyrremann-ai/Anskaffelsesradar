@@ -21,7 +21,17 @@ export type BrregEntity = {
   tvangsavvikling: boolean; slettedato: string | null; adresse: string;
 };
 export type Role = { rolle: string; rolle_navn: string; type: string; navn: string; person_key: string };
-export type SupplierCard = { orgnr: string; brreg: BrregEntity | null; roles: Role[]; brreg_url: string };
+export type Regnskap = {
+  aar: number | null; driftsinntekter: number | null; driftsresultat: number | null; aarsresultat: number | null;
+  egenkapital: number | null; gjeld: number | null; eiendeler: number | null;
+};
+export type Owner = { name: string; orgnr: string | null; share_pct: number | null; source: string; year: number | null; person: boolean };
+export type SupplierCard = {
+  orgnr: string; brreg: BrregEntity | null; roles: Role[]; brreg_url: string;
+  regnskap: Regnskap | null; owners: Owner[]; registers: Record<string, string>;
+  sanctions: { name: string; datasets: string; is_sanction: number } | null;
+};
+export type SourceStatus = { status: "ok" | "feil" | "av" | "demo"; rows?: number | null; at: string; error?: string; note?: string };
 export type CaseEvent = { at: string; actor: string; field: string; old: string | null; new: string | null };
 export type Case = {
   id: number; contract_id: string; title: string; buyer: string; status: string; assignee: string; note: string;
@@ -55,7 +65,7 @@ export type Summary = Stats & {
 export type Meta = {
   mode: "demo" | "live"; updated_at: string | null; llm: string; doffin: boolean; case_statuses: string[];
   refresh: { running: boolean; step: string | null; error: string | null };
-  flag_labels: Record<string, string>;
+  flag_labels: Record<string, string>; sources: Record<string, SourceStatus>;
 };
 
 export function qs(params: Record<string, unknown>): string {

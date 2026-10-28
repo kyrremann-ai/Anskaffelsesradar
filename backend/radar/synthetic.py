@@ -138,6 +138,8 @@ def demo_contracts(n: int = 1800, seed: int = 7) -> list[dict]:
         pub = start + timedelta(days=int(rng.integers(0, 662)))
         title = rng.choice(_TITLES[sector]).format(x=b["name"].split()[0])
         cpv, nature = _CPV[sector]
+        # Renhold og vikartjenester krever godkjenning hos Arbeidstilsynet
+        cpv = "90910000" if title.startswith("Renhold") else "79620000" if title.startswith("Vikar") else cpv
         rows.append({
             "id": f"DEMO-{i:05d}", "source": "demo", "url": None, "title": title, "pub_date": pub.isoformat(),
             "buyer_id": b["id"], "buyer": b["name"], "region": b["region"], "sector": sector,
@@ -173,7 +175,8 @@ def demo_brreg(contracts: list[dict], seed: int = 11) -> tuple[list[dict], list[
             entities.append({"organisasjonsnummer": orgnr, "navn": o["navn"], "organisasjonsform": {"kode": orgform},
                              "naeringskode1": {"kode": "84.110", "beskrivelse": "Generell offentlig administrasjon"},
                              "registrertIMvaregisteret": True,
-                             "forretningsadresse": {"adresse": ["Rådhusplassen 1"], "postnummer": f"{1000 + k}"}})
+                             "forretningsadresse": {"adresse": ["Rådhusplassen 1"], "postnummer": f"{1000 + k}",
+                                                    "kommunenummer": f"{3000 + k}"}})
         else:
             young, odd = k % 23 == 0, k % 17 == 0
             nace = "70.220" if odd else _SECTOR_NACE[sector_of.get(orgnr, "Bygg og anlegg")]
@@ -189,5 +192,93 @@ def demo_brreg(contracts: list[dict], seed: int = 11) -> tuple[list[dict], list[
         if (o["buyer"] and k % 11 == 0) or (not o["buyer"] and k % 19 == 0):
             board[1] = shared[k % len(shared)]
         for j, p in enumerate(board):
-            roles.append({"orgnr": orgnr, "rolle": ["LEDE", "MEDL", "DAGL"][j], "person": p})
+            roles.append({"orgnr": orgnr, "rolle": ["LEDE", "MEDL", "DAGL"][j], "person": p, "year": _year(p)})
     return entities, roles
+
+
+def _year(person: str) -> int:
+    return 1950 + int(person.split()[-1]) % 50
+
+
+def demo_extra(contracts: list[dict], entities: list[dict], roles: list[dict], seed: int = 13) -> dict[str, list[dict]]:
+    """Fiktive data for tilleggskildene: regnskap, eiere, registre, kandidatlister, sanksjoner/PEP og KOFA."""
+    rng = np.random.default_rng(seed)
+    buyers = {c["buyer_id"] for c in contracts}
+    sup = [e for e in entities if e["organisasjonsnummer"] not in buyers]
+    ent = {e["organisasjonsnummer"]: e for e in entities}
+    people = {}
+    for r in roles:
+        people.setdefault(r["orgnr"], []).append(r)
+    buyer_people = [r for r in roles if r["orgnr"] in buyers]
+    out: dict[str, list[dict]] = {k: [] for k in ("regnskap", "owners", "registers", "politicians", "sanctions", "kofa")}
+
+    for k, e in enumerate(sup):
+        o = e["organisasjonsnummer"]
+        if e.get("stiftelsesdato", "") >= "2025" or k % 37 == 0:
+            continue  # nyetablerte og noen få andre har ikke levert regnskap
+        rev = 3e6 if k % 29 == 0 else max(1.5e7, float(rng.lognormal(17.5, 1.0)))
+        eq = -float(rng.uniform(2e5, 2e6)) if k % 31 == 0 else rev * float(rng.uniform(0.05, 0.4))
+        out["regnskap"].append({"orgnr": o, "aar": 2024, "driftsinntekter": rev, "driftsresultat": rev * 0.06,
+                                "aarsresultat": rev * 0.04, "egenkapital": eq, "gjeld": rev * 0.3, "eiendeler": rev * 0.3 + eq})
+
+    holding = "998877665"
+    for k, e in enumerate(sup):
+        o = e["organisasjonsnummer"]
+        dagl = next((r for r in people.get(o, []) if r["rolle"] == "DAGL"), None)
+        rows = []
+        if dagl:
+            rows.append({"owner_name": dagl["person"], "owner_orgnr": None, "owner_birth_year": dagl["year"], "share_pct": 60.0})
+        if k % 35 == 0:  # samme holdingselskap eier flere konkurrenter
+            rows.append({"owner_name": "Fjellet Holding AS", "owner_orgnr": holding, "owner_birth_year": None, "share_pct": 40.0})
+        elif k % 27 == 0 and buyer_people:  # eier sitter i styret hos en oppdragsgiver
+            p = buyer_people[k % len(buyer_people)]
+            rows.append({"owner_name": p["person"], "owner_orgnr": None, "owner_birth_year": p["year"], "share_pct": 40.0})
+        else:
+            rows.append({"owner_name": f"Investor {k}", "owner_orgnr": None, "owner_birth_year": 1960 + k % 30, "share_pct": 40.0})
+        out["owners"] += [{"orgnr": o, "source": "demo", "year": 2024, **r} for r in rows]
+
+    for reg, prefix in (("renhold", "9091"), ("bemanning", "7962")):
+        ids = sorted({w for c in contracts if str(c["cpv"]).startswith(prefix) for w in c["winner_ids"]})
+        for k, o in enumerate(ids):
+            if k % 7 == 3:
+                continue  # mangler i registeret
+            out["registers"].append({"register": reg, "orgnr": o, "navn": ent[o]["navn"],
+                                     "status": "Ikke godkjent" if k % 7 == 5 else "Godkjent"})
+        # Registrene inneholder også mange andre virksomheter
+        out["registers"] += [{"register": reg, "orgnr": f"91{1 if reg == 'renhold' else 2}{i:06d}", "navn": f"Firma {i} AS", "status": "Godkjent"}
+                             for i in range(50)]
+
+    by_sup_buyers: dict[str, set[str]] = {}
+    for c in contracts:
+        for w in c["winner_ids"]:
+            by_sup_buyers.setdefault(w, set()).add(c["buyer_id"])
+    for k, e in enumerate(sup):
+        if k % 21 != 0:
+            continue
+        o = e["organisasjonsnummer"]
+        p = people[o][0]
+        b = sorted(by_sup_buyers.get(o, buyers))[0]
+        kom = ent[b]["forretningsadresse"].get("kommunenummer")
+        out["politicians"].append({"navn": p["person"], "fodselsaar": p["year"], "kommunenr": kom,
+                                   "kommune": ent[b]["navn"].split()[0], "parti": "Demopartiet", "valgt": int(k % 2 == 0)})
+    out["politicians"] += [{"navn": f"Kandidat {i}", "fodselsaar": 1950 + i % 50, "kommunenr": f"{3000 + i % 40}",
+                            "kommune": "", "parti": "Demopartiet", "valgt": int(i % 3 == 0)} for i in range(300)]
+
+    if sup:
+        out["sanctions"].append({"id": "demo-org-1", "schema": "Company", "name": sup[5]["navn"], "birth_year": None,
+                                 "orgnr": sup[5]["organisasjonsnummer"], "is_sanction": 0, "datasets": "Demo: utestengte leverandører"})
+        p = people[sup[9]["organisasjonsnummer"]][0]
+        out["sanctions"].append({"id": "demo-pep-1", "schema": "Person", "name": p["person"], "birth_year": p["year"],
+                                 "orgnr": None, "is_sanction": 0, "datasets": "Demo: politisk eksponerte personer"})
+
+    # KOFA: et utvalg kontrakter, med brudd oftere ved direkte tildeling og ett tilbud
+    for i, c in enumerate(contracts):
+        if i % 12:
+            continue
+        risky = c["method"] == "Direkte tildeling" or c["num_bidders"] == 1
+        brudd = rng.random() < (0.7 if risky else 0.15)
+        d = date.fromisoformat(c["pub_date"]) + timedelta(days=150)
+        out["kofa"].append({"saksnr": f"DEMO-{d.year}/{i:04d}", "dato": d.isoformat(), "innklaget": c["buyer"],
+                            "innklaget_orgnr": c["buyer_id"], "leverandor": c["winner_names"][0], "tittel": c["title"],
+                            "brudd": int(brudd), "ulovlig_direkte": int(brudd and c["method"] == "Direkte tildeling"), "url": None})
+    return out

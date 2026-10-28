@@ -27,7 +27,22 @@ class Settings:
     )
     # Automatisk oppdatering (timer). 0 = av.
     refresh_hours: float = field(default_factory=lambda: float(_env("REFRESH_HOURS", "0")))
+    # Tilleggskilder. Tomme verdier = av.
+    regnskap: bool = field(default_factory=lambda: _env("REGNSKAP", "1") == "1")
+    proff_api_key: str = field(default_factory=lambda: _env("PROFF_API_KEY"))
+    proff_base_url: str = field(default_factory=lambda: _env("PROFF_BASE_URL", "https://api.proff.no"))
+    proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
+    renhold_register_url: str = field(default_factory=lambda: _env("RENHOLD_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/renhold_register.xml"))
+    bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL"))
+    # OpenSanctions er CC BY-NC: krever lisens ved kommersiell bruk. Av som standard.
+    opensanctions_url: str = field(default_factory=lambda: _env("OPENSANCTIONS_URL"))
+    opensanctions_api_key: str = field(default_factory=lambda: _env("OPENSANCTIONS_API_KEY"))
     seed: int = 42
+
+    @property
+    def import_dir(self) -> Path:
+        """Filer lagt her importeres ved neste oppdatering: aksjonaer*.csv, kandidat*.csv, kofa*.csv/json."""
+        return self.data_dir / "import"
 
     @property
     def db_path(self) -> Path:
