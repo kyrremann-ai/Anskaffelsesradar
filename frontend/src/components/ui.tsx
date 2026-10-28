@@ -51,14 +51,21 @@ export function Kpi({ label, value, sub, compare, to }: { label: string; value: 
 }
 
 const TIER = {
-  "Høy": "bg-hi-soft text-hi", "Forhøyet": "bg-mid-soft text-mid", "Lav": "bg-lo-soft text-lo",
+  "Høy": "bg-hi-soft text-hi", "Forhøyet": "bg-mid-soft text-mid", "Lav": "bg-lo-soft text-lo", "Intensjon": "border border-line text-muted",
 } as const;
 
 // Prioritet er rangering, ikke sannsynlighet: også et datasett uten problemer har en topp 5 %
 export const TIER_HELP = "Relativ rangering, ikke sannsynlighet for regelbrudd. Høy = topp 5 % nasjonalt etter summen av observasjonene, forhøyet = persentil 80–95.";
 
 export function TierBadge({ tier }: { tier: Tier }) {
+  if (tier === "Intensjon")
+    return <span title="Intensjonskunngjøring: planlagt direkte tildeling. Ikke en kontrakt, og rangeres ikke." className={cx("inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", TIER[tier])}>Intensjonskunngjøring</span>;
   return <span title={TIER_HELP} className={cx("inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", TIER[tier])}>{tier} prioritet</span>;
+}
+
+// Faste kontrollpunkter vises ved siden av rangeringen, aldri som en del av den
+export function CheckBadge({ label, why }: { label: string; why?: string }) {
+  return <span title={why ? `${label}: ${why}` : label} className="inline-block whitespace-nowrap rounded border border-hi/40 px-1.5 py-0.5 text-xs text-hi">◆ {label}</span>;
 }
 
 export function scoreColor(v: number) {

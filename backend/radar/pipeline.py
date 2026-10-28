@@ -14,6 +14,7 @@ import traceback
 from . import db
 from .config import settings
 from .ingest import brreg, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .observasjon import link
 from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
@@ -125,6 +126,11 @@ def live_sources(con) -> dict:
     return src
 
 
+def _two_years_before(d: str) -> str:
+    # Konkurransen kunngjøres før tildelingen, ofte lenge før for rammeavtaler
+    return f"{int(d[:4]) - 2}{d[4:]}"
+
+
 def run(con, demo: bool | None = None) -> None:
     if not _lock.acquire(blocking=False):
         raise RuntimeError("En oppdatering kjører allerede")
@@ -143,8 +149,12 @@ def run(con, demo: bool | None = None) -> None:
                 _source("Doffin", lambda: db.upsert_contracts(
                     con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src, "nye siden sist")
             sources = doffin_src | live_sources(con)
+            # Prosedyre-ID og konkurransekunngjøringer gir forløp og frister; feil her stopper ikke resten
+            _source("TED forløp og frister", lambda: (ted.backfill_procedures(con, log=_log),
+                                                      ted.competitions(con, _two_years_before(settings.ted_from), log=_log))[1], sources)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
+        link(con, log=_log)
         _log("Scorer kontrakter")
         score_all(con, log=_log)
         if not demo and settings.einnsyn:

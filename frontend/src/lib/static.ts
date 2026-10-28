@@ -169,7 +169,10 @@ function group(d: Row[], col: "sector" | "region" | "buyer_id", minN = 1, nameCo
 const caseStatus = (r: Row) => cases.get(keyOf(r.id))?.status ?? null;
 const scope = (rows: Row[], buyers: string | null) => (buyers ? rows.filter((r) => buyers.split(",").includes(r.buyer_id)) : rows);
 
-function summary(all: Row[], buyers: string | null) {
+function summary(rows: Row[], buyers: string | null) {
+  // Tellingene gjelder kontrakter; intensjonskunngjøringer telles for seg
+  const all = rows.filter((r) => r.notice_type !== "intensjon");
+  const intents = scope(rows, buyers).filter((r) => r.notice_type === "intensjon");
   const d = scope(all, buyers);
   const months = groupBy(d, (r) => (r.pub_date ?? "").slice(0, 7));
   const counts = new Map<string, { key: string; label: string; n: number }>();
@@ -187,7 +190,10 @@ function summary(all: Row[], buyers: string | null) {
       month, n: g.length, flagged: g.filter((r) => r.tier !== "Lav").length, direct: g.filter((r) => r.method === "Direkte tildeling").length })),
     flag_counts: [...counts.values()].sort((a, b) => b.n - a.n),
     by_sector: group(d, "sector"), by_region: group(d, "region"), by_buyer: group(d, "buyer_id", buyers ? 1 : 8, "buyer"),
-    cases: caseCounts,
+    cases: caseCounts, n_intents: intents.length,
+    regler: [...[...d, ...intents].flatMap((r) => r.regler ?? []).reduce((m, x) => {
+      const c = m.get(x.key) ?? { key: x.key, label: x.label, n: 0 }; c.n++; return m.set(x.key, c);
+    }, new Map<string, { key: string; label: string; n: number }>()).values()],
   };
 }
 
@@ -196,7 +202,13 @@ function filter(all: Row[], p: URLSearchParams) {
   const q = (p.get("q") ?? "").toLowerCase();
   if (q) d = d.filter((r) => `${r.title} ${r.buyer} ${r.winner_names.join(" ")}`.toLowerCase().includes(q));
   for (const k of ["tier", "method", "sector", "region"] as const) { const v = p.get(k); if (v) d = d.filter((r) => r[k] === v); }
-  const flag = p.get("flag"); if (flag) d = d.filter((r) => r.flags.some((f) => f.key === flag));
+  // flag=regel:<nøkkel> gir faste kontrollpunkter, flag=type:<kunngjøringstype> gir f.eks. intensjoner
+  const flag = p.get("flag") ?? "";
+  if (flag.startsWith("regel:")) d = d.filter((r) => (r.regler ?? []).some((x) => x.key === flag.slice(6)));
+  else if (flag.startsWith("type:")) d = d.filter((r) => r.notice_type === flag.slice(5));
+  else if (flag) d = d.filter((r) => r.flags.some((f) => f.key === flag));
+  if (!flag.startsWith("type:") && !flag.startsWith("regel:intensjon") && p.get("tier") !== "Intensjon")
+    d = d.filter((r) => r.notice_type !== "intensjon"); // listene viser kontrakter; intensjoner har eget filter
   const sup = p.get("supplier"); if (sup) d = d.filter((r) => r.winner_ids.includes(sup));
   const cs = p.get("case_status");
   if (cs === "uten") d = d.filter((r) => !caseStatus(r));

@@ -73,7 +73,7 @@ def test_bemanning_api_parse():
 def test_valg_parse():
     rows = valg.parse((FX / "kandidater.csv").read_text())
     assert len(rows) == 2 and rows[0] == {"navn_norm": "kari nordmann", "fodselsaar": 1970, "kommunenr": "0301",
-                                          "kommune": "Oslo", "parti": "Demopartiet", "valgt": 1}
+                                          "kommune": "Oslo", "valgt": 1}
     assert rows[1]["kommunenr"] == "0301" and rows[1]["valgt"] == 0
 
 

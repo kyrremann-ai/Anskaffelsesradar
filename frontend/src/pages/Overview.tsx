@@ -22,6 +22,7 @@ export default function Overview() {
   if (!s.n) return <Empty>{s.loading ? "Laster data og kjører modellene første gang. Det tar et øyeblikk …" : "Ingen kontrakter ennå. Trykk «Hent nye data»."}</Empty>;
   const monthly = s.monthly.map((m) => ({ ...m, label: `${MONTHS[Number(m.month.slice(5)) - 1]} ${m.month.slice(2, 4)}` }));
   const maxFlag = Math.max(...s.flag_counts.map((f) => f.n));
+  const o = meta?.observasjonsenhet;
   const sources = `${meta?.sources?.Doffin?.status === "ok" ? "TED og Doffin" : "TED"}, tildelt`;
   const open = Object.entries(s.cases).filter(([k]) => !k.startsWith("Avsluttet")).reduce((a, [, n]) => a + n, 0);
   return (
@@ -38,7 +39,17 @@ export default function Overview() {
         <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Uten konkurranse" compare={vs(s.direct_pct, s.national?.direct_pct)} />
         <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub={`Tildelt verdi ${nok(s.total_value)}`} />
       </div>
-      <p className="mt-2 text-xs text-muted">Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi.</p>
+      <p className="mt-2 text-xs text-muted">
+        {o && !sel.length && <>Én kontrakt = én kunngjort tildeling. {int(o.kunngjøringer)} kunngjøringer fra TED og Doffin gir {int(o.kontrakter)} kontrakter
+          i {int(o.forløp)} anskaffelsesforløp: {int(Object.values(o.duplikater).reduce((a, b) => a + b, 0))} duplikater er slått sammen, og{" "}
+          {int(o.per_type.intensjon ?? 0)} intensjonskunngjøringer telles for seg. </>}
+        Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi. <Link to="/metode" className="underline">Metode</Link>
+      </p>
+      {s.regler.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs text-muted" title="Slår ut uansett hvordan resten av datasettet ser ut, i motsetning til prioriteten">Faste kontrollpunkter:</span>
+          {s.regler.map((x) => <Link key={x.key} to={`/arbeid?flag=regel:${x.key}`} className="rounded border border-hi/40 px-2 py-0.5 text-hi hover:bg-hi-soft">◆ {x.label} <span className="num">{int(x.n)}</span></Link>)}
+        </div>)}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <Card title="Kontrakter per måned" desc="Flagget = høy eller forhøyet prioritet">

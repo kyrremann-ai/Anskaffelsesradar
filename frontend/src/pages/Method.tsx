@@ -1,6 +1,6 @@
 import { Card, PageHead, Skeleton } from "../components/ui";
-import { STATIC, useApi, type SourceStatus } from "../lib/api";
-import { dateTime } from "../lib/format";
+import { STATIC, useApi, type Meta, type SourceStatus } from "../lib/api";
+import { dateTime, int, pct } from "../lib/format";
 
 type Model = {
   weights: { brreg_per_weight: number; brreg_cap: number } | null;
@@ -21,12 +21,65 @@ const f3 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 3, 
 
 export default function Method() {
   const { data: m } = useApi<Model>("/api/model");
+  const { data: meta } = useApi<Meta>("/api/meta");
   if (!m) return <Skeleton className="h-96" />;
   const w = m.weights;
+  const o = meta?.observasjonsenhet;
+  const dups = o ? Object.values(o.duplikater).reduce((a, b) => a + b, 0) : 0;
   return (
     <div>
       <PageHead title="Modell og metode"
         desc="Prioriteten bygger på regelbaserte røde flagg: Fazekas sin korrupsjonsrisikoindeks (CRI) fra kunngjøringen, og flagg fra Brreg og tilleggskildene. Ved siden av vises klagerisiko, en modell trent på ekte KOFA- og Doffin-data." />
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card title="Hva telles: observasjonsenhet" desc="Svaret på «hva er én rad?», før totalsummene brukes">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Kunngjøring:</b> én publisering i TED eller Doffin.</li>
+            <li><b>Kontrakt:</b> én kunngjort tildeling. Delkontrakter i samme kunngjøring telles som én. Samme tildeling i Doffin og TED telles én gang
+              (samme oppdragsgiver, minst én felles leverandør, publisert innen 14 dager; TED-kunngjøringen beholdes fordi den har tilbudstall og tildelt verdi).
+              Rettelser og nye publiseringer i samme TED-forløp med samme leverandør telles én gang.</li>
+            <li><b>Anskaffelsesforløp:</b> alle kunngjøringer med samme prosedyre-ID i TED. Et forløp kan ha flere kontrakter, for eksempel delkontrakter
+              eller tildelinger i en dynamisk innkjøpsordning.</li>
+            <li><b>Intensjonskunngjøringer</b> (planlagt direkte tildeling) er egen kunngjøringstype. De telles ikke som kontrakter og rangeres ikke,
+              men vises som fast kontrollpunkt. Endrings- og avlysningskunngjøringer telles ikke.</li>
+          </ul>
+          {o && (
+            <table className="mt-3 w-full text-sm"><tbody className="divide-y divide-line">
+              <tr><td className="py-1">Kunngjøringer (TED / Doffin)</td><td className="num text-right">{int(o.kunngjøringer)} ({int(o.per_kilde.ted ?? 0)} / {int(o.per_kilde.doffin ?? 0)})</td></tr>
+              {Object.entries(o.duplikater).map(([k, n]) => <tr key={k}><td className="py-1 pl-3 text-muted">− {k}</td><td className="num text-right">{int(n)}</td></tr>)}
+              <tr><td className="py-1 pl-3 text-muted">− Intensjonskunngjøringer</td><td className="num text-right">{int(o.per_type.intensjon ?? 0)}</td></tr>
+              <tr><td className="py-1 pl-3 text-muted">− Endringer og avlysninger som ikke er koblet</td><td className="num text-right">
+                {int(o.kunngjøringer - dups - (o.per_type.intensjon ?? 0) - o.kontrakter)}</td></tr>
+              <tr className="font-medium"><td className="py-1">Kontrakter</td><td className="num text-right">{int(o.kontrakter)}</td></tr>
+              <tr><td className="py-1">Anskaffelsesforløp</td><td className="num text-right">{int(o.forløp)}</td></tr>
+            </tbody></table>)}
+          {o && o.duplikater_tvetydige > 0 && <p className="mt-2 text-xs text-muted">{int(o.duplikater_tvetydige)} Doffin-kunngjøringer passet med flere TED-forløp; den nærmeste i tid er valgt.</p>}
+        </Card>
+        {o && (
+          <Card title="Datakvalitet" desc="Hvor mye av tallene som bygger på oppgitte verdier og registertreff">
+            <table className="w-full text-sm"><tbody className="divide-y divide-line">
+              <tr><td className="py-1">Kontrakter med tildelt verdi</td><td className="num text-right">{int(o.verdi.med_tildelt_verdi)} ({pct(100 * o.verdi.med_tildelt_verdi / o.kontrakter)})</td></tr>
+              <tr><td className="py-1">Bare estimert verdi</td><td className="num text-right">{int(o.verdi.bare_estimat)}</td></tr>
+              <tr><td className="py-1">Uten verdi</td><td className="num text-right">{int(o.verdi.uten_verdi)}</td></tr>
+              <tr><td className="py-1">Rammeavtaler (verdien er ofte maksramme)</td><td className="num text-right">{int(o.verdi.rammeavtaler)}</td></tr>
+              {Object.entries(o.verdi.usikker).map(([k, n]) => <tr key={k}><td className="py-1">Usikker verdi: {k}</td><td className="num text-right">{int(n)}</td></tr>)}
+              <tr><td className="py-1">Tilbudsfrist kjent (fra TEDs konkurransekunngjøring)</td><td className="num text-right">{int(o.tilbudsfrist_kjent)}</td></tr>
+              <tr><td className="py-1">Leverandører med gyldig orgnr</td><td className="num text-right">{int(o.registertreff.gyldig_orgnr)} av {int(o.registertreff.leverandører)} ({pct(100 * o.registertreff.gyldig_orgnr / Math.max(1, o.registertreff.leverandører))})</td></tr>
+              <tr><td className="py-1">Av disse funnet i Enhetsregisteret</td><td className="num text-right">{int(o.registertreff.funnet_i_brreg)} ({pct(100 * o.registertreff.funnet_i_brreg / Math.max(1, o.registertreff.gyldig_orgnr))})</td></tr>
+              <tr><td className="py-1">Kontrakter uten oppgitt leverandør</td><td className="num text-right">{int(o.registertreff.kontrakter_uten_leverandør)}</td></tr>
+            </tbody></table>
+            <p className="mt-2 text-xs text-muted">Utenlandske leverandører har ikke norsk orgnr. Usikre verdier brukes ikke i overskridelse og vises som datakvalitet i saksmappen.</p>
+          </Card>)}
+        <Card title="Faste kontrollpunkter" desc="Slår ut uansett fordeling, og vises ved siden av prioriteten (◆)">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Ett registrert tilbud:</b> kunngjøringen oppgir ett mottatt tilbud.</li>
+            <li><b>Direkte tildeling over nasjonal terskelverdi:</b> prosedyren er direkte tildeling og verdien er minst 1,3 mill. kr (FOA § 5-1). Lovlig ved gyldig unntak, som må sjekkes i begrunnelsen.</li>
+            <li><b>Intensjonskunngjøring om direkte tildeling:</b> oppdragsgiver har varslet en kontrakt uten konkurranse.</li>
+            <li><b>Frist under lovens minstefrist:</b> under 30 dager fra konkurransekunngjøringen ble sendt til TED til tilbudsfristen eller fristen for forespørsel
+              om deltakelse (15 dager ved oppgitt hastebehov). Gjelder åpen og begrenset anbudskonkurranse, konkurranse med forhandling og konkurransepreget dialog.
+              Fristen kan lovlig kortes ned ved forhåndskunngjøring, som ikke er sjekket.</li>
+          </ul>
+        </Card>
+      </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="Slik beregnes prioriteten">
           <ol className="list-decimal space-y-1.5 pl-5 text-sm">
@@ -95,7 +148,7 @@ export default function Method() {
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>
             <li><b>Grunnlag:</b> revisjonens lovpålagte oppgave (kommuneloven kap. 24), jf. personvernforordningen art. 6 nr. 1 bokstav e. Anskaffelsesradar AS behandler opplysningene som databehandler for revisjonen. Grunnlaget og en vurdering av personvernkonsekvenser (DPIA) skal være på plass før personopplysninger tas i bruk hos en kunde.</li>
-            <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune og parti lagres fra kandidatlistene, og fødselsdato hashes fra Brreg. Personnavn sendes aldri til språkmodellen.</li>
+            <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune, valg og om personen ble valgt lagres fra kandidatlistene. Parti lagres ikke (særlig kategori, GDPR art. 9), og fødselsdato hashes fra Brreg. Personnavn sendes aldri til språkmodellen.</li>
             <li><b>Treff er ikke bevis:</b> navn og fødselsår gir en <i>ubekreftet mulig kobling</i>, aldri en bekreftet identitet. Kandidat og innvalgt vises hver for seg. Aksjonærregisteret er et årsskiftebilde, ikke dagens eierskap.</li>
           </ul>
         </Card>

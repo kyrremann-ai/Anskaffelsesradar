@@ -211,17 +211,28 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
           </Button>
-          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i TED ↗</a>}
+          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i {d.source === "doffin" ? "Doffin" : "TED"} ↗</a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
       </header>
+
+      {(d.regler ?? []).length > 0 && (
+        <section className="rounded-md border border-hi/40 p-4">
+          <h3 className="text-sm font-medium">Faste kontrollpunkter</h3>
+          <p className="text-xs text-muted">Slår ut uansett hvordan resten av datasettet ser ut. Må kontrolleres mot originalkunngjøringen.</p>
+          <ul className="mt-2 space-y-1 text-sm">{d.regler.map((x) => (
+            <li key={x.key}><span className="text-hi">◆</span> {x.label}{x.why && <span className="block pl-4 text-xs text-muted">{x.why}</span>}</li>))}
+          </ul>
+        </section>)}
 
       <section className="grid grid-cols-[auto_1fr] items-center gap-4 rounded-md border border-line p-4">
         <div className="num text-4xl font-bold" style={{ color: scoreColor(d.priority) }}>{Math.round(d.priority)}</div>
         <div>
           <div className="text-sm font-medium">Prioritet</div>
           <Meter value={d.priority} className="my-1.5" />
-          <p className="text-xs text-muted">Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd. Datadekning {d.data_coverage} av 4 nøkkelfelt.</p>
+          <p className="text-xs text-muted">{d.tier === "Intensjon"
+            ? "Intensjonskunngjøringer er ikke kontrakter og rangeres ikke. Poengsummen viser bare hvilke observasjoner som slår ut."
+            : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt.</p>
         </div>
         {d.klagerisiko != null && (
           <p className="col-span-2 text-xs text-muted">
@@ -253,13 +264,20 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           {d.justification && <Row k="Begrunnelse" v={d.justification} />}
           <Row k="Antall tilbud" v={int(d.num_bidders)} />
           <Row k="Estimert verdi" v={nok(d.est_value)} />
-          <Row k="Tildelt verdi" v={nok(d.award_value)} />
+          <Row k="Tildelt verdi" v={<>{nok(d.award_value)}{d.value_note && <span className="block text-xs text-muted">○ {d.value_note}</span>}</>} />
           <Row k="Tildelt mot estimat" v={signedPct(d.award_over_estimate_pct)} />
+          <Row k="Tilbudsfrist" v={d.tender_duration_days != null ? `${Math.round(d.tender_duration_days)} dager (fra ${d.cn_ref})` : "–"} />
           <Row k="Varighet" v={d.contract_months ? `${Math.round(d.contract_months)} mnd` : "–"} />
           <Row k="Rammeavtale" v={d.framework ? "Ja (verdi er ofte maksramme)" : "Nei"} />
           <Row k="Tidligere tildelinger, samme par" v={int(d.repeat_pair_count)} />
           <Row k="Vinners andel i CPV-gruppen" v={pct(d.winner_market_share_pct)} />
           <Row k="CPV" v={`${d.cpv ?? "–"} · ${d.nature ?? ""}`} />
+          <Row k="Kunngjøring" v={`${d.source === "doffin" ? "Doffin" : "TED"} ${d.id.replace(/^doffin-/, "")}`} />
+          {d.procedure_id && d.procedure_id !== d.id && <Row k="Anskaffelsesforløp (prosedyre-ID)" v={<span className="font-mono text-xs">{d.procedure_id}</span>} />}
+          {(d.also ?? []).length > 0 && <Row k="Samme tildeling også kunngjort som" v={<>{d.also!.map((a) => (
+            <span key={a.id} className="block" title={a.rule}>{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline">
+              {a.source === "doffin" ? "Doffin" : "TED"} {a.id.replace(/^doffin-/, "")} ↗</a> : a.id}</span>))}
+            <span className="block text-xs text-muted">Telles som én kontrakt</span></>} />}
         </dl>
       </Section>
 

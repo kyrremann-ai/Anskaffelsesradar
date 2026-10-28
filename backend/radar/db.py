@@ -37,13 +37,37 @@ CREATE TABLE IF NOT EXISTS contracts (
 );
 CREATE INDEX IF NOT EXISTS ix_contracts_buyer ON contracts(buyer_id);
 
+-- Observasjonsenhet: én rad i contracts er én kunngjøring. Her kobles kunngjøringene til forløp,
+-- og duplikater (samme tildeling i TED og Doffin, rettelser) peker på kunngjøringen som telles. Bygges på nytt hver kjøring.
+CREATE TABLE IF NOT EXISTS observasjon (
+    contract_id TEXT PRIMARY KEY,
+    notice_type TEXT,                 -- tildeling | intensjon | endring | avlyst
+    procedure_id TEXT,                -- anskaffelsesforløp (TED procedure-identifier, ellers egen id)
+    duplicate_of TEXT,                -- kunngjøringen som telles, hvis denne er et duplikat
+    dup_rule TEXT,                    -- hvilken regel som slo dem sammen
+    value_note TEXT,                  -- verdikontroll: hvorfor verdien er usikker
+    cn_ref TEXT,                      -- konkurransekunngjøringen fristen er hentet fra
+    cn_accelerated INTEGER            -- akselerert frist oppgitt i konkurransekunngjøringen
+);
+
+-- Konkurransekunngjøringer fra TED (bare fristen), koblet til tildelingene via prosedyre-ID
+CREATE TABLE IF NOT EXISTS ted_competition (
+    procedure_id TEXT PRIMARY KEY,
+    publication_number TEXT,
+    dispatch_date TEXT,               -- sendt til TED; lovens minstefrister regnes herfra
+    deadline TEXT,                    -- tidligste tilbudsfrist / frist for forespørsel om deltakelse
+    procedure TEXT,
+    accelerated INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
     cri REAL, klagerisiko REAL,
     repeat_pair_count REAL, prev_contract REAL, winner_market_share_pct REAL,
     award_over_estimate_pct REAL, data_coverage INTEGER,
-    flags TEXT                        -- JSON-liste [{key,label,weight,source}]
+    flags TEXT,                       -- JSON-liste [{key,label,weight,source}]
+    regler TEXT                       -- faste kontrollpunkter [{key,label,why}]
 );
 
 CREATE TABLE IF NOT EXISTS brreg_entities (
@@ -94,7 +118,8 @@ CREATE TABLE IF NOT EXISTS registers (
 );
 -- Kandidatlister fra valg (navn normalisert + fødselsår)
 CREATE TABLE IF NOT EXISTS politicians (
-    navn_norm TEXT, fodselsaar INTEGER, kommunenr TEXT, kommune TEXT, parti TEXT, valgt INTEGER, valg TEXT
+    -- Ikke parti: politisk oppfatning er en særlig kategori (GDPR art. 9), og trengs ikke for koblingen
+    navn_norm TEXT, fodselsaar INTEGER, kommunenr TEXT, kommune TEXT, valgt INTEGER, valg TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_pol ON politicians(navn_norm, fodselsaar);
 -- Sanksjons- og PEP-lister (OpenSanctions, filtrert på Norge)
@@ -127,6 +152,8 @@ def connect(path: Path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
+    if (c := {r[1] for r in con.execute("PRAGMA table_info(observasjon)")}) and "cn_ref" not in c:
+        con.execute("DROP TABLE observasjon")  # bygges på nytt hver kjøring
     con.executescript(SCHEMA)
     cols = {r[1] for r in con.execute("PRAGMA table_info(brreg_roles)")}
     if "fodselsaar" not in cols:  # databaser fra før v2.1
@@ -135,6 +162,12 @@ def connect(path: Path) -> sqlite3.Connection:
         con.execute("ALTER TABLE scores ADD COLUMN klagerisiko REAL")
     if "fetched_at" not in {r[1] for r in con.execute("PRAGMA table_info(contracts)")}:  # fra v2.5
         con.execute("ALTER TABLE contracts ADD COLUMN fetched_at TEXT")
+    if "parti" in {r[1] for r in con.execute("PRAGMA table_info(politicians)")}:  # partiet fjernet (GDPR art. 9)
+        con.execute("ALTER TABLE politicians DROP COLUMN parti")
+        con.commit()
+        con.execute("VACUUM")  # så de slettede verdiene ikke blir liggende i ledige sider
+    if "regler" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # faste kontrollpunkter, fra v2.5
+        con.execute("ALTER TABLE scores ADD COLUMN regler TEXT")
     cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
     for c in ("vurdering", "vurdering_grunn"):  # revisorens vurdering, fra v2.3
         if c not in cols:
