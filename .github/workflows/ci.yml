@@ -19,3 +19,5 @@ jobs:
         with: { node-version: "22" }
       - run: npm ci
       - run: npm run build
+      # Revisjonssporet i Cloudflare-versjonen (Pages Functions)
+      - run: node --test ../deploy/cloudflare/test/*.test.js

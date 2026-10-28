@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -35,6 +37,19 @@ def _clean(v):
     if isinstance(v, list):
         return [_clean(x) for x in v]
     return v
+
+
+def build_info() -> dict:
+    """Hvilken kode som regnet ut prioriteten, og når dataene ble hentet. Vises i bunnteksten og i arbeidspapiret."""
+    commit = os.environ.get("GITHUB_SHA")
+    if not commit:
+        try:
+            commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+                                    cwd=Path(__file__).parent).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            commit = None
+    return {"commit": commit, "built_at": db.now(), "data_updated_at": db.get_meta(api.con, "updated_at"),
+            "sources": {k: v.get("at") for k, v in (db.get_meta(api.con, "sources") or {}).items()}}
 
 
 def export(out: Path, log=print) -> dict[str, int]:
@@ -67,7 +82,8 @@ def export(out: Path, log=print) -> dict[str, int]:
                               "is_buyer": r["orgnr"] in set(df.buyer_id)})
         c["links"] = links
         cards[o] = c
-    meta = api.meta() | {"refresh": {"running": False, "step": None, "log": [], "error": None}, "llm": "av", "doffin": False}
+    meta = api.meta() | {"refresh": {"running": False, "step": None, "log": [], "error": None}, "llm": "av", "doffin": False,
+                         "build": build_info()}
     files: dict[str, object] = {}
     keys = list(cards)
     for i in range(0, max(len(rows), 1), CONTRACTS_PER_FILE):

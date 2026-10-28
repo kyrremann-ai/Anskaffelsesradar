@@ -111,7 +111,7 @@ def row_out(r: pd.Series, full: bool = False) -> dict:
             "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
-                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id"]
+                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id", "fetched_at"]
     return {k: clean(r.get(k)) for k in keys}
 
 

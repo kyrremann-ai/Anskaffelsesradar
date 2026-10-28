@@ -1,0 +1,4 @@
+{
+  "_om": "Én installasjon per kunde: eget Pages-prosjekt, egen D1-database (EU) og egne Access-apper. Kunder ser aldri hverandres saker. Legg til en kunde her, kjør «Radar-tilgang» → setup med kunde-navnet, og nattjobben publiserer til alle.",
+  "demo": {"project": "anskaffelsesradar", "domain": "radar.vikingsea.no", "d1": "radar-saker-eu"}
+}

@@ -280,8 +280,18 @@ export async function exportLabels() {
   await save("revisorvurderinger.csv", "\ufeff" + lines.join("\n"));
 }
 
+// Sporbarhet: hvilken kode og hvilke data prioriteten bygde på, nå og da revisor satte vurderingen
+type Build = { commit?: string | null; built_at?: string; data_updated_at?: string | null };
+const short = (c?: string | null) => (c ? c.slice(0, 7) : "ukjent");
+function grunnlag(b?: Build, v?: { at: string; priority: number | null; tier: string; flags: string[]; build?: Build }) {
+  const now = b ? `<p><small>Datagrunnlag oppdatert ${esc(b.data_updated_at ?? "–")}. Beregnet med programversjon ${esc(short(b.commit))}, bygget ${esc(b.built_at ?? "–")}.</small></p>` : "";
+  const then = v ? `<p><small>Da vurderingen ble satt (${esc(v.at)}): prioritet ${esc(v.priority == null ? "–" : Math.round(v.priority))} (${esc(v.tier)}), `
+    + `flagg: ${esc(v.flags.join(", ") || "ingen")}. Programversjon ${esc(short(v.build?.commit))}, data fra ${esc(v.build?.data_updated_at ?? "–")}.</small></p>` : "";
+  return now + then;
+}
+
 export async function saveWorkpaper(key: string) {
-  const { rows, cards } = await load();
+  const { rows, cards, meta } = await load();
   const c = await caseOut(key);
   const d = rows.find((r) => keyOf(r.id) === key);
   if (!c || !d) throw new HttpError("Fant ikke saken");
@@ -301,7 +311,9 @@ Prioriteten er en relativ rangering, ikke en sannsynlighet for regelbrudd. Den s
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>${esc(d.method)}</td></tr><tr><th>Antall tilbud</th><td>${fmt(d.num_bidders)}</td></tr>
 <tr><th>Estimert verdi</th><td>${fmt(d.est_value)}</td></tr><tr><th>Tildelt verdi</th><td>${fmt(d.award_value)}</td></tr>
-<tr><th>Leverandør(er)</th><td>${esc(d.winner_names.join(", "))}</td></tr><tr><th>Kilde</th><td>${esc(d.url ?? d.source)}</td></tr></table>
+<tr><th>Leverandør(er)</th><td>${esc(d.winner_names.join(", "))}</td></tr><tr><th>Kilde</th><td>${esc(d.url ?? d.source)}</td></tr>
+<tr><th>Kunngjøringen hentet</th><td>${esc(d.fetched_at ?? "før hentetidspunkt ble lagret")}</td></tr></table>
+${grunnlag(meta?.build, (c as unknown as Record<string, any>).vurdert_grunnlag)}
 <h2>Observasjoner (flagg)</h2><ul>${flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>${sup || "<li>–</li>"}</ul>
 <h2>Notat</h2><pre>${esc(c.note)}</pre>
 <h2>Logg</h2><table><tr><th>Tid</th><th>Hvem</th><th>Felt</th><th>Fra</th><th>Til</th></tr>${ev}</table></html>`;
@@ -366,9 +378,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
     const key = m[1], c = cases.get(key);
     if (!c) throw new HttpError("Fant ikke saken");
     if (method === "DELETE") {
-      cases.delete(key);
+      // Databasen først: Cloudflare-versjonen avviser sletting for å bevare revisjonssporet
       const d = await db();
-      if (d) await d.doc(`cases/${key}`).delete();
+      if (d) await d.doc(`cases/${key}`).delete().catch((e: any) => { throw new HttpError(e?.message ?? String(e)); });
+      cases.delete(key);
       return { ok: true };
     }
     if (method === "PATCH") {
@@ -376,6 +389,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       const next = { ...c, events: [...c.events], updated_at: now } as StoredCase & Record<string, unknown>;
       for (const k of ["status", "assignee", "note", "vurdering", "vurdering_grunn"] as const) {
         if (k in body && (body[k] ?? "") !== (c[k] ?? "")) { next.events.push({ at: now, ...who, field: k, old: c[k] ?? null, new: body[k] ?? null }); next[k] = body[k]; }
+      }
+      if ("vurdering" in body && body.vurdering !== c.vurdering) {
+        const r = rows.find((x) => keyOf(x.id) === key);
+        next.vurdert_grunnlag = { at: now, priority: r?.priority ?? null, tier: r?.tier ?? "", flags: (r?.flags ?? []).map((f) => f.label), build: meta?.build };
       }
       await saveCase(key, next);
       return caseOut(key);
