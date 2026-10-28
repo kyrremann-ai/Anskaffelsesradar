@@ -10,10 +10,13 @@ export const queryClient = new QueryClient({
 // Andre brukeres endringer i saker kommer live fra databasen
 if (STATIC) onCasesChange(() => queryClient.invalidateQueries());
 
-export type Tier = "Høy" | "Forhøyet" | "Lav";
+export type Tier = "Høy" | "Forhøyet" | "Lav" | "Intensjon";
+// Faste kontrollpunkter: slår ut uansett hvordan resten av datasettet ser ut
+export type Check = { key: string; label: string; why?: string };
 // checks: alternative forklaringer som er sjekket (leverandørflagg). data_note: hva som mangler i dataene.
 export type FlagCheck = { q: string; status: "ok" | "justert" | "forklarer" | "svekker" | "ukjent"; a: string };
-export type Flag = { key: string; label: string; weight: number; source: string; why?: string; checks?: FlagCheck[]; data_note?: string };
+// bidrag = prioritetspoeng flagget gir (summen av bidragene er prioriteten)
+export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number; checks?: FlagCheck[]; data_note?: string };
 
 export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;
@@ -21,6 +24,17 @@ export type ContractRow = {
   award_over_estimate_pct: number | null; priority: number; tier: Tier; percentile: number;
   cri: number; klagerisiko: number | null; winner_names: string[]; winner_ids: string[]; flags: Flag[]; data_coverage: number;
   framework: number; case_status: string | null; source: string;
+  notice_type: "tildeling" | "intensjon"; regler: Check[];
+  // Rangering innen oppdragsgivertype × sektor
+  peer_group: string | null; peer_percentile: number | null; peer_tier: Tier;
+};
+// Hva én rad er, og hvor mange kunngjøringer som er slått sammen (fra observasjon.link)
+export type Observasjonsenhet = {
+  kunngjøringer: number; per_kilde: Record<string, number>; per_type: Record<string, number>;
+  duplikater: Record<string, number>; duplikater_tvetydige: number; kontrakter: number;
+  kontrakter_per_kilde: Record<string, number>; forløp: number; tilbudsfrist_kjent: number;
+  verdi: { usikker: Record<string, number>; med_tildelt_verdi: number; bare_estimat: number; uten_verdi: number; rammeavtaler: number };
+  registertreff: { leverandører: number; gyldig_orgnr: number; funnet_i_brreg: number; kontrakter_uten_leverandør: number };
 };
 
 export type BrregEntity = {
@@ -55,6 +69,9 @@ export type ContractDetail = ContractRow & {
   suppliers: SupplierCard[]; case: Case | null; assessments: Assessment[];
   // null = ikke slått opp (bare høy/forhøyet prioritet slås opp)
   einnsyn?: JournalPost[] | null;
+  // Observasjonsenhet: forløpet kunngjøringen hører til, og kunngjøringer som er slått sammen med denne
+  procedure_id?: string; value_note?: string | null; cn_ref?: string | null;
+  also?: { id: string; source: string; url: string | null; rule: string }[];
 };
 export type JournalPost = { title: string | null; date: string | null; type: string | null; case: string | null; url: string | null };
 
@@ -71,11 +88,13 @@ export type Summary = Stats & {
   monthly: { month: string; n: number; flagged: number; direct: number }[];
   flag_counts: { key: string; label: string; n: number }[]; by_sector: Group[]; by_region: Group[];
   by_buyer: Group[]; cases: Record<string, number>;
+  regler: { key: string; label: string; n: number }[]; n_intents: number;
 };
 export type Meta = {
   mode: "demo" | "live"; updated_at: string | null; llm: string; doffin: boolean; case_statuses: string[];
   refresh: { running: boolean; step: string | null; error: string | null };
   flag_labels: Record<string, string>; sources: Record<string, SourceStatus>;
+  observasjonsenhet?: Observasjonsenhet | null;
 };
 
 export function qs(params: Record<string, unknown>): string {
@@ -103,3 +122,12 @@ export function useApi<T>(path: string, params: Record<string, unknown> = {}, op
   const url = path + qs(params);
   return useQuery<T>({ queryKey: [url], queryFn: () => api<T>(url), ...opts });
 }
+
+// Fakturakontroll: kundens kjøp per leverandør mot kunngjorte kontrakter (bare summer, aldri enkeltlinjer)
+export type InvoiceRow = {
+  buyer_id: string; orgnr: string; name: string | null; public: boolean; n: number; total: number; max_12m: number;
+  first: string; last: string; accounts: { account: string; sum: number }[];
+  contracts: { id: string; source: string; url: string | null; title: string; pub_date: string; value: number | null; type: string }[];
+  checks: Check[];
+};
+export type InvoiceResult = { rows: InvoiceRow[]; period: [string, string] | null; radar_from: string | null };

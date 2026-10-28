@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, llm, pipeline
+from . import db, fakturakontroll, llm, pipeline
 from .config import settings
 from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
@@ -65,6 +65,7 @@ def frame() -> pd.DataFrame:
             s = s.drop(columns=[c for c in ("repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct") if c in s])
             df = df.merge(s, on="id", how="inner")
             df["flags"] = df["flags"].map(lambda x: json.loads(x or "[]"))
+            df["regler"] = df["regler"].map(lambda x: json.loads(x or "[]"))
             df["flag_keys"] = df["flags"].map(lambda fl: {f["key"] for f in fl})
         bi = BrregIndex(con)
         _cache.update(key=key, df=df, brreg=bi, extra=ExtraIndex(con, bi.ent))
@@ -108,10 +109,12 @@ def clean(v):
 def row_out(r: pd.Series, full: bool = False) -> dict:
     keys = ["id", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "method", "num_bidders", "est_value",
             "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "cri", "klagerisiko",
-            "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source"]
+            "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source",
+            "notice_type", "regler", "peer_group", "peer_percentile", "peer_tier"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
-                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id"]
+                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id", "fetched_at",
+                 "procedure_id", "also", "value_note", "cn_ref"]
     return {k: clean(r.get(k)) for k in keys}
 
 
@@ -132,7 +135,7 @@ def meta():
             "refresh": pipeline.status, "llm": llm.provider(settings).name,
             "doffin": settings.doffin, "case_statuses": CASE_STATUSES,
             "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
-            "sources": db.get_meta(con, "sources") or {}}
+            "sources": db.get_meta(con, "sources") or {}, "observasjonsenhet": db.get_meta(con, "observasjonsenhet")}
 
 
 @app.post("/api/refresh")
@@ -167,6 +170,9 @@ def summary(buyers: str | None = None):
     all_ = frame()
     if all_.empty:
         return {"n": 0, "loading": pipeline.status["running"]}
+    intents = scope(all_, buyers)
+    intents = intents[intents.notice_type == "intensjon"]
+    all_ = all_[all_.notice_type == "tildeling"]  # tellingene gjelder kontrakter; intensjoner vises for seg
     df = scope(all_, buyers)
     out = _stats(df) | {"national": _stats(all_) if buyers else None, "n_buyers": int(df.buyer_id.nunique()),
                         "period": [df.pub_date.min(), df.pub_date.max()] if len(df) else [None, None]}
@@ -183,6 +189,12 @@ def summary(buyers: str | None = None):
     out["by_region"] = _group(df, "region")
     out["by_buyer"] = _group(df, "buyer_id", min_n=1 if buyers else 8, name_col="buyer")
     out["cases"] = {s: int(n) for s, n in df.case_status.value_counts().items()}
+    checks: dict[str, list] = {}
+    for rs in pd.concat([df.regler, intents.regler]):
+        for x in rs:
+            checks.setdefault(x["key"], [x["label"], 0])[1] += 1
+    out["regler"] = [{"key": k, "label": v[0], "n": v[1]} for k, v in checks.items()]
+    out["n_intents"] = len(intents)
     return out
 
 
@@ -201,16 +213,24 @@ def _group(df: pd.DataFrame, col: str, min_n: int = 1, name_col: str | None = No
 
 # ---------------------------------------------------------------- kontrakter
 
-def _filter(df, q, tier, method, sector, region, flag, supplier, case_status):
+def _filter(df, q, tier, method, sector, region, flag, supplier, case_status, rank=""):
     if q:
         ql = q.lower()
         hay = (df.title.fillna("") + " " + df.buyer.fillna("") + " " + df.winner_names.map(" ".join)).str.lower()
         df = df[hay.str.contains(ql, regex=False)]
-    for col, v in (("tier", tier), ("method", method), ("sector", sector), ("region", region)):
+    # rank=gruppe: prioritetsnivå innen sammenligningsgruppen i stedet for nasjonalt
+    for col, v in (("peer_tier" if rank == "gruppe" else "tier", tier), ("method", method), ("sector", sector), ("region", region)):
         if v:
             df = df[df[col] == v]
-    if flag:
+    # flag=regel:<nøkkel> gir faste kontrollpunkter, flag=type:<kunngjøringstype> gir f.eks. intensjoner
+    if flag.startswith("regel:"):
+        df = df[df.regler.map(lambda rs: any(x["key"] == flag[6:] for x in rs))]
+    elif flag.startswith("type:"):
+        df = df[df.notice_type == flag[5:]]
+    elif flag:
         df = df[df.flag_keys.map(lambda s: flag in s)]
+    if not flag.startswith(("type:", "regel:intensjon")) and tier != "Intensjon":
+        df = df[df.notice_type == "tildeling"]  # listene viser kontrakter; intensjoner har eget filter
     if supplier:
         df = df[df.winner_ids.map(lambda w: supplier in w)]
     if case_status == "uten":
@@ -229,29 +249,39 @@ SORTABLE = {"priority", "pub_date", "num_bidders", "award_value", "award_over_es
 
 @app.get("/api/contracts")
 def contracts(buyers: str | None = None, q: str = "", tier: str = "", method: str = "", sector: str = "",
-              region: str = "", flag: str = "", supplier: str = "", case_status: str = "",
+              region: str = "", flag: str = "", supplier: str = "", case_status: str = "", rank: str = "",
               sort: str = "priority", dir: str = "desc", page: int = 1, limit: int = Query(50, le=500)):
     df = frame()
     if df.empty:
         return {"rows": [], "total": 0}
-    df = _filter(scope(df, buyers), q, tier, method, sector, region, flag, supplier, case_status)
+    df = _filter(scope(df, buyers), q, tier, method, sector, region, flag, supplier, case_status, rank)
     sort = sort if sort in SORTABLE else "priority"
+    if sort == "priority":  # ved lik poengsum avgjør persentilen (større kontrakter først)
+        sort = "peer_percentile" if rank == "gruppe" else "percentile"
     df = df.sort_values(sort, ascending=dir == "asc", na_position="last")
     page_df = df.iloc[(page - 1) * limit: page * limit]
     return {"rows": [row_out(r) for _, r in page_df.iterrows()], "total": len(df)}
 
 
+@app.get("/api/invoices")
+def invoices(buyers: str | None = None):
+    """Kundens fakturaer per leverandør mot kunngjorte kontrakter. Bare summer, aldri enkeltlinjer."""
+    return fakturakontroll.analyse(con, {b for b in buyers.split(",") if b} if buyers else None)
+
+
 @app.get("/api/contracts/export.csv")
 def export(buyers: str | None = None, q: str = "", tier: str = "", method: str = "", sector: str = "",
-           region: str = "", flag: str = "", supplier: str = "", case_status: str = ""):
-    df = _filter(scope(frame(), buyers), q, tier, method, sector, region, flag, supplier, case_status)
+           region: str = "", flag: str = "", supplier: str = "", case_status: str = "", rank: str = ""):
+    df = _filter(scope(frame(), buyers), q, tier, method, sector, region, flag, supplier, case_status, rank)
     out = df.assign(flagg=df["flags"].map(lambda fl: "; ".join(f["label"] for f in fl)),
                     leverandor=df.winner_names.map("; ".join))
     cols = ["id", "pub_date", "title", "buyer", "leverandor", "method", "num_bidders", "est_value", "award_value",
-            "award_over_estimate_pct", "priority", "percentile", "tier", "cri", "klagerisiko", "flagg", "case_status", "url"]
+            "award_over_estimate_pct", "priority", "percentile", "tier", "peer_group", "peer_percentile", "peer_tier",
+            "cri", "klagerisiko", "flagg", "case_status", "url"]
     # Kolonnenavnene sier at prioritet og klagerisiko er rangeringer, ikke sannsynligheter
     head = {"priority": "prioritet_poeng", "percentile": "prioritet_persentil_nasjonalt", "tier": "prioritetsnivå_relativt",
-            "klagerisiko": "klagerisiko_persentil", "flagg": "observasjoner"}
+            "klagerisiko": "klagerisiko_persentil", "flagg": "observasjoner", "peer_group": "sammenligningsgruppe",
+            "peer_percentile": "prioritet_persentil_i_gruppe", "peer_tier": "prioritetsnivå_i_gruppe"}
     buf = io.StringIO()
     out.sort_values("priority", ascending=False)[cols].rename(columns=head).to_csv(buf, index=False, sep=";", decimal=",")
     return StreamingResponse(iter(["﻿" + buf.getvalue()]), media_type="text/csv",

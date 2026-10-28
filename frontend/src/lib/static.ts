@@ -2,7 +2,7 @@
 // Kontraktsdata leses fra contracts.json/cards.json/meta.json som publiseres sammen med siden
 // (laget av `python -m radar.export_static`). Oversikt, filtre og lister regnes ut her.
 // Saker lagres i artifactens database (db-kapabiliteten), så de deles mellom brukerne.
-import type { Case, CaseEvent, ContractRow, Group, Stats, SupplierCard } from "./api";
+import type { Case, CaseEvent, ContractRow, Group, InvoiceResult, Stats, SupplierCard } from "./api";
 
 type Row = ContractRow & Record<string, unknown> & { winner: string | null };
 type Card = SupplierCard & { links: { orgnr: string; name: string; via: string; rolle: string; is_buyer: boolean }[] };
@@ -13,7 +13,7 @@ declare global { interface Window { claude?: { use(name: string): Promise<any> }
 
 class HttpError extends Error {}
 
-let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string }> | null = null;
+let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string; invoices: InvoiceResult }> | null = null;
 const getJson = (f: string) => fetch(f).then((r) => {
   if (!r.ok) throw new HttpError(`Fant ikke ${f}`);
   return r.json();
@@ -27,7 +27,8 @@ function load() {
       Promise.all(parts.contracts.map(getJson)).then((xs) => xs.flat()),
       Promise.all(parts.cards.map(getJson)).then((xs) => Object.assign({}, ...xs)),
     ]);
-    return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined };
+    return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined,
+      invoices: (m.invoices ?? { rows: [], period: null, radar_from: null }) as InvoiceResult };
   });
   return data;
 }
@@ -169,7 +170,10 @@ function group(d: Row[], col: "sector" | "region" | "buyer_id", minN = 1, nameCo
 const caseStatus = (r: Row) => cases.get(keyOf(r.id))?.status ?? null;
 const scope = (rows: Row[], buyers: string | null) => (buyers ? rows.filter((r) => buyers.split(",").includes(r.buyer_id)) : rows);
 
-function summary(all: Row[], buyers: string | null) {
+function summary(rows: Row[], buyers: string | null) {
+  // Tellingene gjelder kontrakter; intensjonskunngjøringer telles for seg
+  const all = rows.filter((r) => r.notice_type !== "intensjon");
+  const intents = scope(rows, buyers).filter((r) => r.notice_type === "intensjon");
   const d = scope(all, buyers);
   const months = groupBy(d, (r) => (r.pub_date ?? "").slice(0, 7));
   const counts = new Map<string, { key: string; label: string; n: number }>();
@@ -187,7 +191,10 @@ function summary(all: Row[], buyers: string | null) {
       month, n: g.length, flagged: g.filter((r) => r.tier !== "Lav").length, direct: g.filter((r) => r.method === "Direkte tildeling").length })),
     flag_counts: [...counts.values()].sort((a, b) => b.n - a.n),
     by_sector: group(d, "sector"), by_region: group(d, "region"), by_buyer: group(d, "buyer_id", buyers ? 1 : 8, "buyer"),
-    cases: caseCounts,
+    cases: caseCounts, n_intents: intents.length,
+    regler: [...[...d, ...intents].flatMap((r) => r.regler ?? []).reduce((m, x) => {
+      const c = m.get(x.key) ?? { key: x.key, label: x.label, n: 0 }; c.n++; return m.set(x.key, c);
+    }, new Map<string, { key: string; label: string; n: number }>()).values()],
   };
 }
 
@@ -195,15 +202,28 @@ function filter(all: Row[], p: URLSearchParams) {
   let d = scope(all, p.get("buyers"));
   const q = (p.get("q") ?? "").toLowerCase();
   if (q) d = d.filter((r) => `${r.title} ${r.buyer} ${r.winner_names.join(" ")}`.toLowerCase().includes(q));
-  for (const k of ["tier", "method", "sector", "region"] as const) { const v = p.get(k); if (v) d = d.filter((r) => r[k] === v); }
-  const flag = p.get("flag"); if (flag) d = d.filter((r) => r.flags.some((f) => f.key === flag));
+  // rank=gruppe: prioritetsnivå innen sammenligningsgruppen i stedet for nasjonalt
+  const group = p.get("rank") === "gruppe";
+  for (const k of ["tier", "method", "sector", "region"] as const) {
+    const v = p.get(k), col = k === "tier" && group ? "peer_tier" : k;
+    if (v) d = d.filter((r) => r[col] === v);
+  }
+  // flag=regel:<nøkkel> gir faste kontrollpunkter, flag=type:<kunngjøringstype> gir f.eks. intensjoner
+  const flag = p.get("flag") ?? "";
+  if (flag.startsWith("regel:")) d = d.filter((r) => (r.regler ?? []).some((x) => x.key === flag.slice(6)));
+  else if (flag.startsWith("type:")) d = d.filter((r) => r.notice_type === flag.slice(5));
+  else if (flag) d = d.filter((r) => r.flags.some((f) => f.key === flag));
+  if (!flag.startsWith("type:") && !flag.startsWith("regel:intensjon") && p.get("tier") !== "Intensjon")
+    d = d.filter((r) => r.notice_type !== "intensjon"); // listene viser kontrakter; intensjoner har eget filter
   const sup = p.get("supplier"); if (sup) d = d.filter((r) => r.winner_ids.includes(sup));
   const cs = p.get("case_status");
   if (cs === "uten") d = d.filter((r) => !caseStatus(r));
   else if (cs === "med") d = d.filter((r) => caseStatus(r));
   else if (cs === "apne") d = d.filter((r) => { const s = caseStatus(r); return !!s && !s.startsWith("Avsluttet"); });
   else if (cs) d = d.filter((r) => caseStatus(r) === cs);
-  const sort = p.get("sort") || "priority", asc = p.get("dir") === "asc";
+  const asc = p.get("dir") === "asc";
+  let sort = p.get("sort") || "priority";
+  if (sort === "priority") sort = group ? "peer_percentile" : "percentile"; // ved lik poengsum går større kontrakter først
   return [...d].sort((a, b) => {
     const x = a[sort] as number | string | null, y = b[sort] as number | string | null;
     if (x == null) return 1; if (y == null) return -1;
@@ -250,10 +270,11 @@ export async function exportCsv(params: Record<string, unknown>) {
   const { rows } = await load();
   const p = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
   const cols = ["id", "pub_date", "title", "buyer", "region", "sector", "method", "num_bidders", "est_value", "award_value",
-    "priority", "percentile", "tier", "cri", "klagerisiko"];
+    "priority", "percentile", "tier", "peer_group", "peer_percentile", "peer_tier", "cri", "klagerisiko"];
   // Kolonnenavnene sier at prioritet og klagerisiko er rangeringer, ikke sannsynligheter
   const head: Record<string, string> = { priority: "prioritet_poeng", percentile: "prioritet_persentil_nasjonalt",
-    tier: "prioritetsnivå_relativt", klagerisiko: "klagerisiko_persentil" };
+    tier: "prioritetsnivå_relativt", klagerisiko: "klagerisiko_persentil", peer_group: "sammenligningsgruppe",
+    peer_percentile: "prioritet_persentil_i_gruppe", peer_tier: "prioritetsnivå_i_gruppe" };
   const lines = [[...cols.map((c) => head[c] ?? c), "leverandører", "observasjoner", "sak"].join(";")];
   for (const r of filter(rows, p)) {
     lines.push([...cols.map((c) => nb(r[c])), r.winner_names.join(", "), r.flags.map((f) => f.label).join(", "), caseStatus(r) ?? ""]
@@ -280,8 +301,18 @@ export async function exportLabels() {
   await save("revisorvurderinger.csv", "\ufeff" + lines.join("\n"));
 }
 
+// Sporbarhet: hvilken kode og hvilke data prioriteten bygde på, nå og da revisor satte vurderingen
+type Build = { commit?: string | null; built_at?: string; data_updated_at?: string | null };
+const short = (c?: string | null) => (c ? c.slice(0, 7) : "ukjent");
+function grunnlag(b?: Build, v?: { at: string; priority: number | null; tier: string; flags: string[]; build?: Build }) {
+  const now = b ? `<p><small>Datagrunnlag oppdatert ${esc(b.data_updated_at ?? "–")}. Beregnet med programversjon ${esc(short(b.commit))}, bygget ${esc(b.built_at ?? "–")}.</small></p>` : "";
+  const then = v ? `<p><small>Da vurderingen ble satt (${esc(v.at)}): prioritet ${esc(v.priority == null ? "–" : Math.round(v.priority))} (${esc(v.tier)}), `
+    + `flagg: ${esc(v.flags.join(", ") || "ingen")}. Programversjon ${esc(short(v.build?.commit))}, data fra ${esc(v.build?.data_updated_at ?? "–")}.</small></p>` : "";
+  return now + then;
+}
+
 export async function saveWorkpaper(key: string) {
-  const { rows, cards } = await load();
+  const { rows, cards, meta } = await load();
   const c = await caseOut(key);
   const d = rows.find((r) => keyOf(r.id) === key);
   if (!c || !d) throw new HttpError("Fant ikke saken");
@@ -301,7 +332,9 @@ Prioriteten er en relativ rangering, ikke en sannsynlighet for regelbrudd. Den s
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>${esc(d.method)}</td></tr><tr><th>Antall tilbud</th><td>${fmt(d.num_bidders)}</td></tr>
 <tr><th>Estimert verdi</th><td>${fmt(d.est_value)}</td></tr><tr><th>Tildelt verdi</th><td>${fmt(d.award_value)}</td></tr>
-<tr><th>Leverandør(er)</th><td>${esc(d.winner_names.join(", "))}</td></tr><tr><th>Kilde</th><td>${esc(d.url ?? d.source)}</td></tr></table>
+<tr><th>Leverandør(er)</th><td>${esc(d.winner_names.join(", "))}</td></tr><tr><th>Kilde</th><td>${esc(d.url ?? d.source)}</td></tr>
+<tr><th>Kunngjøringen hentet</th><td>${esc(d.fetched_at ?? "før hentetidspunkt ble lagret")}</td></tr></table>
+${grunnlag(meta?.build, (c as unknown as Record<string, any>).vurdert_grunnlag)}
 <h2>Observasjoner (flagg)</h2><ul>${flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>${sup || "<li>–</li>"}</ul>
 <h2>Notat</h2><pre>${esc(c.note)}</pre>
 <h2>Logg</h2><table><tr><th>Tid</th><th>Hvem</th><th>Felt</th><th>Fra</th><th>Til</th></tr>${ev}</table></html>`;
@@ -325,6 +358,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       .sort((a, b) => a.name.localeCompare(b.name, "nb"));
   }
   if (path === "/api/summary") return summary(rows, p.get("buyers"));
+  if (path === "/api/invoices") {
+    const inv = (await load()).invoices, b = p.get("buyers");
+    return b ? { ...inv, rows: inv.rows.filter((r) => b.split(",").includes(r.buyer_id)) } : inv;
+  }
   if (path === "/api/contracts") {
     const d = filter(rows, p), limit = +(p.get("limit") || 50), page = +(p.get("page") || 1);
     return { rows: d.slice((page - 1) * limit, page * limit).map(rowOut), total: d.length };
@@ -366,9 +403,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
     const key = m[1], c = cases.get(key);
     if (!c) throw new HttpError("Fant ikke saken");
     if (method === "DELETE") {
-      cases.delete(key);
+      // Databasen først: Cloudflare-versjonen avviser sletting for å bevare revisjonssporet
       const d = await db();
-      if (d) await d.doc(`cases/${key}`).delete();
+      if (d) await d.doc(`cases/${key}`).delete().catch((e: any) => { throw new HttpError(e?.message ?? String(e)); });
+      cases.delete(key);
       return { ok: true };
     }
     if (method === "PATCH") {
@@ -376,6 +414,10 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       const next = { ...c, events: [...c.events], updated_at: now } as StoredCase & Record<string, unknown>;
       for (const k of ["status", "assignee", "note", "vurdering", "vurdering_grunn"] as const) {
         if (k in body && (body[k] ?? "") !== (c[k] ?? "")) { next.events.push({ at: now, ...who, field: k, old: c[k] ?? null, new: body[k] ?? null }); next[k] = body[k]; }
+      }
+      if ("vurdering" in body && body.vurdering !== c.vurdering) {
+        const r = rows.find((x) => keyOf(x.id) === key);
+        next.vurdert_grunnlag = { at: now, priority: r?.priority ?? null, tier: r?.tier ?? "", flags: (r?.flags ?? []).map((f) => f.label), build: meta?.build };
       }
       await saveCase(key, next);
       return caseOut(key);

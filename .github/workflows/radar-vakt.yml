@@ -1,0 +1,22 @@
+# Vakt for nattjobben: blir rød hvis «Radar på Cloudflare» ikke har lyktes de siste 30 timene
+# (jobben kjørte ikke, ble deaktivert eller feilet). GitHub sender e-post når en planlagt jobb feiler.
+name: Radar-vakt
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 08:00 norsk vintertid, etter nattjobben
+  workflow_dispatch:
+permissions:
+  actions: read
+jobs:
+  vakt:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          last=$(gh run list -R "$GITHUB_REPOSITORY" --workflow radar-pages.yml --status success --limit 1 --json createdAt -q '.[0].createdAt')
+          echo "Siste vellykkede kjøring: ${last:-ingen}"
+          if [ -z "$last" ] || [ $(( $(date +%s) - $(date -d "$last" +%s) )) -gt $((30*3600)) ]; then
+            echo "::error::Radar på Cloudflare har ikke lyktes de siste 30 timene. Dataene på radar.vikingsea.no kan være gamle."
+            exit 1
+          fi

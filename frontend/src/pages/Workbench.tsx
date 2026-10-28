@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CaseFile } from "../components/CaseFile";
-import { Button, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
+import { Button, CheckBadge, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
 import { STATIC, qs, useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { date } from "../lib/format";
 import { exportCsv, exportLabels } from "../lib/static";
@@ -25,18 +25,22 @@ export default function Workbench() {
   const [limit, setLimit] = useState(PAGE);
   const [exportError, setExportError] = useState("");
   const filters = { buyers, q: get("q"), tier: get("tier"), flag: get("flag"), method: get("method"), sector: get("sector"),
-    case_status: get("sak"), supplier: get("supplier") };
+    case_status: get("sak"), supplier: get("supplier"), rank: get("rank") };
   useEffect(() => setLimit(PAGE), [JSON.stringify(filters)]); // eslint-disable-line
   const { data, isLoading, isFetching } = useApi<{ rows: ContractRow[]; total: number }>("/api/contracts", { ...filters, limit });
   const { data: meta } = useApi<Meta>("/api/meta");
   const { data: sum } = useApi<Summary>("/api/summary", { buyers });
   const sel = get("id") || (typeof window !== "undefined" && window.innerWidth >= 1024 ? data?.rows[0]?.id : "") || "";
-  const flagItems = (sum?.flag_counts ?? []).map((f) => ({ v: f.key, l: `${f.label} (${f.n})` }));
+  const flagItems = [
+    ...(sum?.regler ?? []).map((x) => ({ v: `regel:${x.key}`, l: `◆ ${x.label} (${x.n})` })),
+    ...(sum?.n_intents ? [{ v: "type:intensjon", l: `Intensjonskunngjøringer (${sum.n_intents})` }] : []),
+    ...(sum?.flag_counts ?? []).map((f) => ({ v: f.key, l: `${f.label} (${f.n})` })),
+  ];
 
   return (
     <div>
       <PageHead title="Arbeidsflate"
-        desc="Kontraktene i dine enheter, sortert etter prioritet. Velg en kontrakt for å se hvorfor den er flagget, sette status og skrive notat."
+        desc="Kontraktene i dine enheter, sortert etter prioritet. ◆ er faste kontrollpunkter som gjelder uansett rangering. Velg en kontrakt for å se hvorfor den er flagget, sette status og skrive notat."
         right={STATIC
           ? <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => exportCsv(filters).catch((e) => setExportError(String(e.message)))}>Eksporter CSV</Button>
@@ -52,6 +56,8 @@ export default function Workbench() {
       {exportError && <p className="-mt-2 mb-3 text-sm text-hi">{exportError}</p>}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Search value={q} onChange={setQ} placeholder="Søk tittel, oppdragsgiver, leverandør" />
+        <Select label="Rangering" value={get("rank")} onChange={(v) => set("rank", v)} placeholder="Nasjonal rangering"
+          items={[{ v: "gruppe", l: "Innen sammenligningsgruppe" }]} />
         <Select label="Prioritet" value={get("tier")} onChange={(v) => set("tier", v)} placeholder="Alle prioriteter"
           items={["Høy", "Forhøyet", "Lav"].map((t) => ({ v: t, l: `${t} prioritet` }))} />
         <Select label="Flagg" value={get("flag")} onChange={(v) => set("flag", v)} placeholder="Alle flagg" items={flagItems} />
@@ -80,7 +86,8 @@ export default function Workbench() {
                         <span className="block truncate text-sm font-medium">{r.title}</span>
                         <span className="block truncate text-xs text-muted">{r.buyer} · {date(r.pub_date)}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-1">
-                          <TierBadge tier={r.tier} />
+                          <TierBadge tier={get("rank") === "gruppe" ? r.peer_tier : r.tier} />
+                          {(r.regler ?? []).map((x) => <CheckBadge key={x.key} label={x.label} why={x.why} />)}
                           {r.case_status && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent">{r.case_status}</span>}
                           {r.klagerisiko != null && r.klagerisiko >= 80 && (
                             <span className="rounded border border-line px-1.5 py-0.5 text-xs text-muted" title="Klagerisiko (eksperimentell): persentil blant kontraktene i radaren, ikke en sannsynlighet. Teller ikke i prioriteten.">

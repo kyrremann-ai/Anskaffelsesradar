@@ -174,38 +174,32 @@ def parse_hit(h: dict) -> dict | None:
         # Søket oppgir ikke prosedyre; varsel om intensjon betyr planlagt direkte tildeling
         "method": "Direkte tildeling" if "ANNOUNCEMENT_OF_INTENT" in types else "Annet",
         "accelerated": 0, "justification": None, "framework": 0,
-        # Intensjonskunngjøringer har 0 mottatte tilbud: det er én leverandør uten konkurranse
-        "num_bidders": h.get("receivedTenders") or (1 if "ANNOUNCEMENT_OF_INTENT" in types else None), "est_value": est, "award_value": None,
+        # Intensjonskunngjøringer oppgir ikke tilbud. Tilbudstallet tas bare med når kunngjøringen oppgir det.
+        "num_bidders": h.get("receivedTenders") or None, "est_value": est, "award_value": None,
         "tender_duration_days": None, "contract_months": None,
         "winner_ids": list(winners), "winner_names": list(winners.values()), "winner_size": None,
-        "raw": {"doffin_type": h.get("type"), "location": loc},
+        "raw": {"doffin_type": h.get("type"), "notice_type": notice_type(h.get("type")), "location": loc},
     }
 
 
-def _dupe_key(r: dict) -> tuple:
-    return (r["buyer_id"], tuple(sorted(r["winner_ids"])))
+def notice_type(t: str | None) -> str:
+    """Doffins kunngjøringstype som tildeling, intensjon, endring eller avlyst."""
+    t = str(t or "").upper()
+    return ("intensjon" if "INTENT" in t else "endring" if t.startswith("CHANGE") else
+            "avlyst" if t.startswith("CANCELLED") else "tildeling")
 
 
 def refresh(con, api_key: str, since: str, log=print) -> list[dict]:
-    """Nye Doffin-tildelinger som ikke allerede finnes fra TED (samme kjøper og vinnere innen 14 dager)."""
+    """Nye Doffin-tildelinger. Alle lagres; kunngjøringer som også finnes i TED kobles i observasjon.link."""
+    raws = [json.loads(r["raw"] or "{}") or {} for r in con.execute("SELECT raw FROM contracts WHERE source='doffin'")]
     known = {r["id"] for r in con.execute("SELECT id FROM contracts WHERE source='doffin'")}
-    # Bare siste måneder hvis vi har hentet før: færre kall, og under grensen på 30 kall i minuttet
+    # Bare siste måneder hvis vi har hentet før: færre kall, og under grensen på 30 kall i minuttet.
+    # Rader fra før kunngjøringstype ble lagret (og duplikater ble droppet ved import) gir full henting én gang.
     last = con.execute("SELECT MAX(pub_date) AS d FROM contracts WHERE source='doffin'").fetchone()["d"]
-    if last and (d := _date(last)):
+    if last and (d := _date(last)) and all("notice_type" in r for r in raws):
         since = max(since, (d - timedelta(days=45)).isoformat())
-    ted: dict[tuple, list[date]] = {}
-    for r in con.execute("SELECT buyer_id, winner_ids, pub_date FROM contracts WHERE source='ted'"):
-        k = (r["buyer_id"], tuple(sorted(json.loads(r["winner_ids"] or "[]"))))
-        if d := _date(r["pub_date"]):
-            ted.setdefault(k, []).append(d)
-    rows, dupes = [], 0
-    for h in search_results(api_key, since, log=log):
-        if f"doffin-{h.get('id')}" in known or not (row := parse_hit(h)):
-            continue
-        d = _date(row["pub_date"])
-        if d and any(abs((d - t).days) <= 14 for t in ted.get(_dupe_key(row), [])):
-            dupes += 1
-            continue
-        rows.append(row)
-    log(f"Doffin: {len(rows)} nye tildelinger ({dupes} fantes allerede fra TED)")
+    else:
+        known = set()
+    rows = [row for h in search_results(api_key, since, log=log) if f"doffin-{h.get('id')}" not in known and (row := parse_hit(h))]
+    log(f"Doffin: {len(rows)} nye kunngjøringer")
     return rows

@@ -12,6 +12,7 @@ const NAV = [
   { to: "/arbeid", label: "Arbeidsflate" },
   { to: "/oppdragsgivere", label: "Oppdragsgivere" },
   { to: "/leverandorer", label: "Leverandører" },
+  { to: "/fakturaer", label: "Fakturakontroll" },
   { to: "/doffin", label: "Doffin live" },
   { to: "/metode", label: "Modell og metode" },
 ].filter((n) => !(STATIC && n.to === "/doffin"));

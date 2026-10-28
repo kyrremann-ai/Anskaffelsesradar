@@ -260,9 +260,9 @@ def demo_extra(contracts: list[dict], entities: list[dict], roles: list[dict], s
         b = sorted(by_sup_buyers.get(o, buyers))[0]
         kom = ent[b]["forretningsadresse"].get("kommunenummer")
         out["politicians"].append({"navn": p["person"], "fodselsaar": p["year"], "kommunenr": kom,
-                                   "kommune": ent[b]["navn"].split()[0], "parti": "Demopartiet", "valgt": int(k % 2 == 0)})
+                                   "kommune": ent[b]["navn"].split()[0], "valgt": int(k % 2 == 0)})
     out["politicians"] += [{"navn": f"Kandidat {i}", "fodselsaar": 1950 + i % 50, "kommunenr": f"{3000 + i % 40}",
-                            "kommune": "", "parti": "Demopartiet", "valgt": int(i % 3 == 0)} for i in range(300)]
+                            "kommune": "", "valgt": int(i % 3 == 0)} for i in range(300)]
 
     if sup:
         out["sanctions"].append({"id": "demo-org-1", "schema": "Company", "name": sup[5]["navn"], "birth_year": None,

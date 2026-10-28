@@ -14,7 +14,8 @@ import traceback
 from . import db
 from .config import settings
 from . import supplier_context
-from .ingest import brreg, brreg_changes, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, brreg_changes, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .observasjon import link
 from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
@@ -58,7 +59,7 @@ def load_demo(con) -> dict:
 
 
 def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
-    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA, bemanningsregister)."""
+    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA, bemanningsregister, fakturadata)."""
     d, out = settings.import_dir, {}
     if not d.exists():
         return out
@@ -85,6 +86,9 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
     # Fusjon/fisjon/omdanning: fra_orgnr;til_orgnr;type;dato
     for f in sorted(d.glob("endringer*.csv")):
         out["Fusjon/fisjon (fil)"] = brreg_changes.import_successors(con, f)
+    # Kundens fakturadata (bare i kundens database)
+    for f in sorted([*d.glob("faktura*.csv"), *d.glob("faktura*.xlsx")]):
+        out["Fakturadata"] = out.get("Fakturadata", 0) + faktura.import_file(con, f, log=_log)
     kf = sorted([*d.glob("kofa*.csv"), *d.glob("kofa*.json")])
     for f in kf:
         kofa.store(con, kofa.parse(f.read_text(encoding="utf-8-sig")))
@@ -134,6 +138,11 @@ def live_sources(con) -> dict:
     return src
 
 
+def _two_years_before(d: str) -> str:
+    # Konkurransen kunngjøres før tildelingen, ofte lenge før for rammeavtaler
+    return f"{int(d[:4]) - 2}{d[4:]}"
+
+
 def run(con, demo: bool | None = None) -> None:
     if not _lock.acquire(blocking=False):
         raise RuntimeError("En oppdatering kjører allerede")
@@ -152,8 +161,12 @@ def run(con, demo: bool | None = None) -> None:
                 _source("Doffin", lambda: db.upsert_contracts(
                     con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src, "nye siden sist")
             sources = doffin_src | live_sources(con)
+            # Prosedyre-ID og konkurransekunngjøringer gir forløp og frister; feil her stopper ikke resten
+            _source("TED forløp og frister", lambda: (ted.backfill_procedures(con, log=_log),
+                                                      ted.competitions(con, _two_years_before(settings.ted_from), log=_log))[1], sources)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
+        link(con, log=_log)
         _log("Scorer kontrakter")
         score_all(con, log=_log)
         if not demo and settings.einnsyn:
@@ -169,8 +182,20 @@ def run(con, demo: bool | None = None) -> None:
         _log(f"Feil: {e}")
         traceback.print_exc()
     finally:
+        _record_run(con)
         status["running"] = False
         _lock.release()
+
+
+def _record_run(con) -> None:
+    """Kjøreloggen i databasen: de siste 60 kjøringene med kilder som feilet. Overlever omstart, i motsetning til status["log"]."""
+    try:
+        failed = [k for k, v in (db.get_meta(con, "sources") or {}).items() if v.get("status") == "feil"]
+        run = {"at": db.now(), "ok": status["error"] is None and not failed, "error": status["error"], "failed": failed}
+        with db.tx(con):
+            db.set_meta(con, "runs", ((db.get_meta(con, "runs") or []) + [run])[-60:])
+    except Exception as e:  # noqa: BLE001
+        print(f"Kunne ikke lagre kjøreloggen: {e}", flush=True)
 
 
 def run_in_background(con, demo: bool | None = None) -> bool:

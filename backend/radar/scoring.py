@@ -7,6 +7,7 @@ på ekte KOFA-saker. Den beholdes som baseline i kofa_eval og kofa_models.
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 import pandas as pd
@@ -46,9 +47,20 @@ FLAG_LABELS = {
     "single_bid": ("Ett registrert tilbud", 1.8), "direct": ("Direkte tildeling", 1.3),
     "repeat": ("Over tre tildelinger til samme leverandør", 1.5), "overrun": ("Tildelt >20 % over estimat", 1.2),
     "low_comp": ("To registrerte tilbud", 0.8), "prev": ("Tidligere tildeling til samme leverandør", 0.5),
-    "accel": ("Akselerert prosedyre oppgitt", 0.7), "share": ("Leverandøren har over 30 % av oppdragsgiverens kontraktsverdi", 0.4),
+    "accel": ("Akselerert prosedyre oppgitt", 0.7), "share": ("Leverandøren har over 30 % av kontraktsverdien i CPV-gruppen", 0.4),
+    "short_deadline": ("Frist under lovens minstefrist", 1.0),
 }
 CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
+# Faste kontrollpunkter: slår ut uansett fordeling, og vises ved siden av rangeringen
+NATIONAL_THRESHOLD = 1_300_000  # nasjonal terskelverdi, FOA § 5-1 (kr ekskl. mva)
+MIN_DEADLINE = {"open": 30, "restricted": 30, "neg-w-call": 30, "comp-dial": 30, "innovation": 30}  # dager, FOA del III
+MIN_DEADLINE_ACCELERATED = 15
+# Sammenligningsgruppe: oppdragsgivertype × sektor (CPV-hovedgruppe). Små grupper faller tilbake på oppdragsgivertype.
+PEER_MIN = 30
+BUYER_FORMS = {"KOMM": "Kommune", "KF": "Kommune", "FYLK": "Fylkeskommune", "HF": "Helseforetak", "STAT": "Stat",
+               "ORGL": "Stat", "SF": "Stat", "IKS": "Interkommunalt selskap"}
+BUYER_NAMES = [("Fylkeskommune", r"fylkeskommune"), ("Kommune", r"kommune|bydel"), ("Helseforetak", r"\bhf\b|helse|sykehus"),
+               ("Stat", r"direktorat|departement|etaten|tilsyn|statens|forsvar|politi|universitet|høgskole")]
 # Register-tillegg i prioritetsscoren. Dokumentert på metodesiden.
 BRREG_PER_WEIGHT, BRREG_CAP = 8.0, 20.0
 
@@ -130,25 +142,37 @@ class ModelBundle:
 
 def contracts_frame(con, extra: list[dict] | None = None) -> pd.DataFrame:
     """Kontrakter med avledede felt. `extra` er rader som ikke ligger i databasen (f.eks. Doffin-treff for KOFA)."""
-    df = pd.read_sql_query("SELECT * FROM contracts", con)
-    for c in ("winner_ids", "winner_names"):
+    # Duplikater (samme tildeling i TED og Doffin, rettelser), endringer og avlysninger er ikke egne kontrakter.
+    # Intensjonskunngjøringer tas med som egen kunngjøringstype, men teller ikke i historikk og rangering.
+    df = pd.read_sql_query("""
+        SELECT c.*, COALESCE(o.notice_type, 'tildeling') AS notice_type, COALESCE(o.procedure_id, c.id) AS procedure_id,
+               o.value_note, o.cn_ref, o.cn_accelerated, t.procedure AS cn_procedure,
+               (SELECT json_group_array(json_object('id', d.id, 'source', d.source, 'url', d.url, 'rule', od.dup_rule))
+                  FROM observasjon od JOIN contracts d ON d.id = od.contract_id WHERE od.duplicate_of = c.id) AS also
+        FROM contracts c LEFT JOIN observasjon o ON o.contract_id = c.id
+        LEFT JOIN ted_competition t ON t.publication_number = o.cn_ref
+        WHERE o.duplicate_of IS NULL AND COALESCE(o.notice_type, 'tildeling') IN ('tildeling', 'intensjon')""", con)
+    for c in ("winner_ids", "winner_names", "also"):
         df[c] = df[c].map(lambda s: json.loads(s or "[]"))
     if extra:
         df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True)
+        df["notice_type"] = df.notice_type.fillna("tildeling")
     if df.empty:
         return df
     df["winner"] = df.winner_ids.map(lambda w: w[0] if w else None)
     df = df.sort_values(["pub_date", "id"]).reset_index(drop=True)
+    award = df.notice_type.eq("tildeling") & df.winner.notna()
     # Tidligere tildelinger for samme oppdragsgiver + leverandør (før denne kontrakten)
-    df["repeat_pair_count"] = df.groupby(["buyer_id", "winner"], dropna=False).cumcount().where(df.winner.notna())
-    df["prev_contract"] = (df.repeat_pair_count > 0).astype(float).where(df.winner.notna())
+    df["repeat_pair_count"] = df[award].groupby(["buyer_id", "winner"]).cumcount().reindex(df.index)
+    df["prev_contract"] = (df.repeat_pair_count > 0).astype(float).where(award)
     # Vinners andel av verdien (eller antall) i CPV-divisjonen
     df["cpv2"] = df.cpv.fillna("").str[:2]
-    val = df.award_value.fillna(df.est_value).fillna(1.0)
+    val = df.award_value.fillna(df.est_value).fillna(1.0).where(award)
     grp = val.groupby([df.cpv2, df.winner]).transform("sum")
     tot = val.groupby(df.cpv2).transform("sum")
-    df["winner_market_share_pct"] = (grp / tot * 100).where(df.winner.notna())
-    ok = df.est_value.gt(0) & df.award_value.notna()
+    df["winner_market_share_pct"] = (grp / tot * 100).where(award)
+    # Verdier som feilet verdikontrollen brukes ikke til overskridelse
+    ok = df.est_value.gt(0) & df.award_value.notna() & df.get("value_note", pd.Series(None, index=df.index)).isna()
     df["award_over_estimate_pct"] = ((df.award_value / df.est_value - 1) * 100).where(ok)
     return df
 
@@ -174,13 +198,63 @@ def rule_flags(r) -> list[dict]:
         f.append("accel")
     if pd.notna(r.winner_market_share_pct) and r.winner_market_share_pct > 30:
         f.append("share")
+    if short_deadline(r):
+        f.append("short_deadline")
     out = []
     for k in f:
         label, w = FLAG_LABELS[k]
         if k == "overrun" and r.framework:
             label, w = label + " (rammeavtale, ofte maksverdi)", w * 0.5
-        out.append({"key": k, "label": label, "weight": w, "source": "kunngjøring"})
+        flag = {"key": k, "label": label, "weight": w, "source": "kunngjøring"}
+        if k == "short_deadline":
+            flag["why"] = f"{r.tender_duration_days:.0f} dager fra utsendelse av {r.cn_ref} til frist"
+        out.append(flag)
+    if getattr(r, "value_note", None) and isinstance(r.value_note, str):
+        out.append({"key": "value_check", "label": "Usikker verdi", "weight": 0.0, "source": "datakvalitet", "why": r.value_note})
     return out
+
+
+def short_deadline(r) -> bool:
+    """Frist fra utsendelse av konkurransekunngjøringen er kortere enn minstefristen for prosedyren."""
+    days, proc = getattr(r, "tender_duration_days", None), getattr(r, "cn_procedure", None)
+    if days is None or pd.isna(days) or proc not in MIN_DEADLINE:
+        return False
+    return days < (MIN_DEADLINE_ACCELERATED if getattr(r, "cn_accelerated", 0) == 1 else MIN_DEADLINE[proc])
+
+
+def fixed_checks(r) -> list[dict]:
+    """Faste kontrollpunkter: observasjoner som slår ut uansett hvordan resten av datasettet ser ut."""
+    out = []
+    value = r.award_value if pd.notna(r.award_value) else r.est_value
+    if r.notice_type == "tildeling" and r.num_bidders == 1:
+        out.append({"key": "ett_tilbud", "label": "Ett registrert tilbud", "why": "Kunngjøringen oppgir ett mottatt tilbud"})
+    if r.notice_type == "intensjon":
+        out.append({"key": "intensjon", "label": "Intensjonskunngjøring om direkte tildeling",
+                    "why": "Planlagt kontrakt uten konkurranse" + (f", oppgitt verdi {value:,.0f} kr".replace(",", " ") if pd.notna(value) else ", verdi ikke oppgitt")})
+    elif r.method == "Direkte tildeling" and pd.notna(value) and value >= NATIONAL_THRESHOLD:
+        out.append({"key": "direkte_over_terskel", "label": "Direkte tildeling over nasjonal terskelverdi",
+                    "why": f"{value:,.0f} kr, terskel {NATIONAL_THRESHOLD:,.0f} kr".replace(",", " ")})
+    if short_deadline(r):
+        out.append({"key": "kort_frist", "label": "Frist under lovens minstefrist",
+                    "why": f"{r.tender_duration_days:.0f} dager fra utsendelse av {r.cn_ref} til frist, minstefrist "
+                           f"{MIN_DEADLINE_ACCELERATED if r.cn_accelerated == 1 else MIN_DEADLINE[r.cn_procedure]} dager"})
+    return out
+
+
+def buyer_type(orgform: str | None, name: str | None) -> str:
+    if orgform in BUYER_FORMS:
+        return BUYER_FORMS[orgform]
+    n = str(name or "").lower()
+    return next((t for t, rx in BUYER_NAMES if re.search(rx, n)), "Annen oppdragsgiver")
+
+
+def peer_rank(df: pd.DataFrame, key: pd.Series, award: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """Persentil innen oppdragsgivertype × sektor, og gruppen som ble brukt."""
+    group = df.buyer_type + " × " + df.sector.fillna("Annet")
+    n = group[award].value_counts()
+    group = group.where(group.map(n).fillna(0) >= PEER_MIN, df.buyer_type + " (alle sektorer)")
+    pct = key[award].groupby(group[award]).rank(pct=True, method="average") * 100
+    return pct.reindex(df.index), group
 
 
 def pct_rank(s: pd.Series) -> pd.Series:
@@ -204,29 +278,43 @@ def score_all(con, log=print) -> int:
         others = suppliers_by_buyer.get(r.buyer_id, set())
         # Leverandørflaggene sjekkes mot alternative forklaringer (flerårig verdi, rammeavtale, konsern, tidspunkt, samme enhet)
         bf = context.apply(c, brreg.flags(c, others) + extra.flags(c, others), others)
-        flags.append(fl + bf)
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
-        bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))
+        bw = sum(f["weight"] for f in bf)
+        bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * bw))
+        # Hvor mange prioritetspoeng hvert flagg bidrar med (register-tillegget deles forholdsmessig når taket nås)
+        scale = (100 + BRREG_CAP) / 100
+        for f in fl:
+            f["bidrag"] = round(f["weight"] / CRI_MAX * 100 / scale, 1)
+        for f in bf:
+            f["bidrag"] = round(bboost[-1] * f["weight"] / bw / scale, 1) if bw else 0.0
+        flags.append(fl + bf)
     df["cri"], df["brreg_boost"] = cri, bboost
     raw = df.cri + df.brreg_boost
     df["priority"] = (raw / (100 + BRREG_CAP) * 100).clip(0, 100)
-    # Reglene gir mange like poengsummer; ved likhet rangeres større kontrakter først
-    df["percentile"] = pct_rank(raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)
-    df["tier"] = np.select([df.percentile >= 95, df.percentile >= 80], ["Høy", "Forhøyet"], "Lav")
+    # Reglene gir mange like poengsummer; ved likhet rangeres større kontrakter først.
+    # Rangeringen gjelder bare kontraktene. Intensjonskunngjøringer rangeres ikke; de vises som eget kontrollpunkt.
+    award = df.notice_type.eq("tildeling")
+    key = raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4
+    df["percentile"] = pct_rank(key[award]).reindex(df.index)
+    df["tier"] = np.select([~award, df.percentile >= 95, df.percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
+    # Samme rangering innen sammenligningsgruppen, så sektorer som kjøper ulikt ikke dominerer topplisten
+    df["buyer_type"] = [buyer_type((brreg.ent.get(b) or {}).get("orgform"), n) for b, n in zip(df.buyer_id, df.buyer)]
+    df["peer_percentile"], df["peer_group"] = peer_rank(df, key, award)
+    df["peer_tier"] = np.select([~award, df.peer_percentile >= 95, df.peer_percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
     # Klagerisiko (eksperimentell): persentil for sannsynlighet for KOFA-klage. Vises, men teller ikke i prioriteten.
     km = klagerisiko.load_model()
     df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "cri", "klagerisiko",
+    cols = ["priority", "tier", "percentile", "peer_group", "peer_percentile", "peer_tier", "cri", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():
         vals = [None if (isinstance(r[c], float) and np.isnan(r[c])) else (r[c].item() if hasattr(r[c], "item") else r[c]) for c in cols]
-        rows.append([r.id, *vals, json.dumps(flags[i], ensure_ascii=False)])
+        rows.append([r.id, *vals, json.dumps(flags[i], ensure_ascii=False), json.dumps(fixed_checks(r), ensure_ascii=False)])
     with tx(con):
         con.execute("DELETE FROM scores")
-        con.executemany(f"INSERT INTO scores(contract_id, {','.join(cols)}, flags) VALUES ({','.join('?' * (len(cols) + 2))})", rows)
+        con.executemany(f"INSERT INTO scores(contract_id, {','.join(cols)}, flags, regler) VALUES ({','.join('?' * (len(cols) + 3))})", rows)
         set_meta(con, "weights", {"brreg_per_weight": BRREG_PER_WEIGHT, "brreg_cap": BRREG_CAP})
     log(f"Scoret {len(rows)} kontrakter")
     return len(rows)

@@ -77,6 +77,8 @@ python deploy/cf_radar.py invite kari@firma.no Kari   # bruker ~/.config/havbruk
 RADAR_DEMO=1 deploy/build_pages.sh ut-pages/ && python deploy/cf_radar.py deploy ut-pages/
 ```
 
+Drift (én installasjon per kunde, varsling, sikkerhetskopi med gjenopprettingstest, EU-lagring og revisjonsspor): se [docs/drift.md](docs/drift.md). Databehandlere: [docs/databehandlere.md](docs/databehandlere.md).
+
 ## Produksjon (Hetzner)
 
 ```bash

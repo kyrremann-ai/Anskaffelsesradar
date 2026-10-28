@@ -1,0 +1,11 @@
+Leverandør orgnr;Leverandørnavn;Fakturadato;Beløp ekskl. mva;Konto;Fakturanummer
+111111111;Rent og Pent AS;15.01.2025;400 000,00;6360 Renhold;1001
+111111111;Rent og Pent AS;15.04.2025;400 000,00;6360 Renhold;1002
+111111111;Rent og Pent AS;15.07.2025;400 000,00;6360 Renhold;1003
+111111111;Rent og Pent AS;15.10.2025;400 000,00;6360 Renhold;1004
+333333333;Fiktiv Konsulent AS;01.03.2025;700 000,00;6700 Konsulenter;2001
+333333333;Fiktiv Konsulent AS;01.09.2025;700 000,00;6700 Konsulenter;2002
+444444444;Liten Leverandør AS;01.05.2025;45 000,00;6500 Verktøy;3001
+444444444;Liten Leverandør AS;01.06.2025;80 000,00;6500 Verktøy;3002
+555555555;Under Terskel AS;10.02.2025;30 000;6500 Verktøy;4001
+;Mangler orgnr;10.02.2025;1 000;6500;5001

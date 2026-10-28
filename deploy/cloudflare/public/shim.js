@@ -2,7 +2,8 @@
 // Klienten er den samme som artifacten (VITE_STATIC=1). Saker lagres i D1 via /api/cases,
 // brukeren er e-posten Cloudflare Access har logget inn, og filer lastes ned i nettleseren.
 (() => {
-  const json = (r) => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.json(); };
+  // Feilmeldingen fra serveren vises til brukeren (f.eks. at saker ikke kan slettes)
+  const json = async (r) => { if (!r.ok) throw new Error((await r.text().catch(() => "")) || `${r.status} ${r.statusText}`); return r.json(); };
   let me = null;
   const email = () => (me ??= fetch("api/me").then(json).then((m) => m.email || null));
 
@@ -22,6 +23,7 @@
     doc(path) {
       return {
         set: (data) => fetch(`api/${path}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(json),
+        delete: () => fetch(`api/${path}`, { method: "DELETE" }).then(json),
       };
     },
   };

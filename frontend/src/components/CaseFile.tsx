@@ -64,7 +64,8 @@ function FlagList({ flags }: { flags: Flag[] }) {
                 <li key={f.key} className={cx("rounded-md border px-3 py-2 text-sm", dq ? "border-dashed border-line text-muted" : "border-line")}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-2"><span className={dq ? "text-muted" : "text-mid"} aria-hidden>{dq ? "○" : "▲"}</span>{f.label}</span>
-                    {!dq && <span className="num shrink-0 text-xs text-muted">vekt {f.weight.toLocaleString("nb-NO")}</span>}
+                    {!dq && <span className="num shrink-0 text-xs text-muted" title={`Vekt ${f.weight.toLocaleString("nb-NO")}`}>
+                      {f.bidrag != null ? `+${f.bidrag.toLocaleString("nb-NO")} poeng` : `vekt ${f.weight.toLocaleString("nb-NO")}`}</span>}
                   </div>
                   {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{f.why}</div>}
                   {f.data_note && <div className="mt-0.5 pl-5 text-xs text-mid">{f.data_note}</div>}
@@ -235,17 +236,35 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
           </Button>
-          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i TED ↗</a>}
+          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i {d.source === "doffin" ? "Doffin" : "TED"} ↗</a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
       </header>
+
+      {(d.regler ?? []).length > 0 && (
+        <section className="rounded-md border border-hi/40 p-4">
+          <h3 className="text-sm font-medium">Faste kontrollpunkter</h3>
+          <p className="text-xs text-muted">Slår ut uansett hvordan resten av datasettet ser ut. Må kontrolleres mot originalkunngjøringen.</p>
+          <ul className="mt-2 space-y-1 text-sm">{d.regler.map((x) => (
+            <li key={x.key}><span className="text-hi">◆</span> {x.label}{x.why && <span className="block pl-4 text-xs text-muted">{x.why}</span>}</li>))}
+          </ul>
+        </section>)}
 
       <section className="grid grid-cols-[auto_1fr] items-center gap-4 rounded-md border border-line p-4">
         <div className="num text-4xl font-bold" style={{ color: scoreColor(d.priority) }}>{Math.round(d.priority)}</div>
         <div>
           <div className="text-sm font-medium">Prioritet</div>
           <Meter value={d.priority} className="my-1.5" />
-          <p className="text-xs text-muted">Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd. Datadekning {d.data_coverage} av 4 nøkkelfelt.</p>
+          <p className="text-xs text-muted">{d.tier === "Intensjon"
+            ? "Intensjonskunngjøringer er ikke kontrakter og rangeres ikke. Poengsummen viser bare hvilke observasjoner som slår ut."
+            : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt
+            {d.data_coverage < 4 && <> (mangler {[d.num_bidders == null && "tilbudstall", d.est_value == null && "estimert verdi",
+              d.award_value == null && "tildelt verdi", d.contract_months == null && "varighet"].filter(Boolean).join(", ")})</>}.
+            {" "}Flagg som ikke kan vurderes uten disse feltene, slår ikke ut.</p>
+          {d.peer_group && d.peer_percentile != null && (
+            <p className="mt-1 text-xs text-muted" title="Samme poengsum rangert bare mot kontrakter fra samme type oppdragsgiver og sektor">
+              Innen sammenligningsgruppen <b className="font-medium">{d.peer_group}</b>: {d.peer_tier.toLowerCase()} prioritet,
+              blant de {pct(Math.max(0.1, 100 - d.peer_percentile))} høyeste.</p>)}
         </div>
         {d.klagerisiko != null && (
           <p className="col-span-2 text-xs text-muted">
@@ -277,13 +296,20 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           {d.justification && <Row k="Begrunnelse" v={d.justification} />}
           <Row k="Antall tilbud" v={int(d.num_bidders)} />
           <Row k="Estimert verdi" v={nok(d.est_value)} />
-          <Row k="Tildelt verdi" v={nok(d.award_value)} />
+          <Row k="Tildelt verdi" v={<>{nok(d.award_value)}{d.value_note && <span className="block text-xs text-muted">○ {d.value_note}</span>}</>} />
           <Row k="Tildelt mot estimat" v={signedPct(d.award_over_estimate_pct)} />
+          <Row k="Tilbudsfrist" v={d.tender_duration_days != null ? `${Math.round(d.tender_duration_days)} dager (fra ${d.cn_ref})` : "–"} />
           <Row k="Varighet" v={d.contract_months ? `${Math.round(d.contract_months)} mnd` : "–"} />
           <Row k="Rammeavtale" v={d.framework ? "Ja (verdi er ofte maksramme)" : "Nei"} />
           <Row k="Tidligere tildelinger, samme par" v={int(d.repeat_pair_count)} />
           <Row k="Vinners andel i CPV-gruppen" v={pct(d.winner_market_share_pct)} />
           <Row k="CPV" v={`${d.cpv ?? "–"} · ${d.nature ?? ""}`} />
+          <Row k="Kunngjøring" v={`${d.source === "doffin" ? "Doffin" : "TED"} ${d.id.replace(/^doffin-/, "")}`} />
+          {d.procedure_id && d.procedure_id !== d.id && <Row k="Anskaffelsesforløp (prosedyre-ID)" v={<span className="font-mono text-xs">{d.procedure_id}</span>} />}
+          {(d.also ?? []).length > 0 && <Row k="Samme tildeling også kunngjort som" v={<>{d.also!.map((a) => (
+            <span key={a.id} className="block" title={a.rule}>{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline">
+              {a.source === "doffin" ? "Doffin" : "TED"} {a.id.replace(/^doffin-/, "")} ↗</a> : a.id}</span>))}
+            <span className="block text-xs text-muted">Telles som én kontrakt</span></>} />}
         </dl>
       </Section>
 

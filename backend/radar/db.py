@@ -32,17 +32,49 @@ CREATE TABLE IF NOT EXISTS contracts (
     winner_ids TEXT,                  -- JSON-liste med orgnr
     winner_names TEXT,                -- JSON-liste
     winner_size TEXT,
-    raw TEXT                          -- JSON fra kilden, for sporbarhet
+    raw TEXT,                         -- JSON fra kilden, for sporbarhet
+    fetched_at TEXT                   -- når denne versjonen av kunngjøringen ble hentet
 );
 CREATE INDEX IF NOT EXISTS ix_contracts_buyer ON contracts(buyer_id);
+
+-- Observasjonsenhet: én rad i contracts er én kunngjøring. Her kobles kunngjøringene til forløp,
+-- og duplikater (samme tildeling i TED og Doffin, rettelser) peker på kunngjøringen som telles. Bygges på nytt hver kjøring.
+CREATE TABLE IF NOT EXISTS observasjon (
+    contract_id TEXT PRIMARY KEY,
+    notice_type TEXT,                 -- tildeling | intensjon | endring | avlyst
+    procedure_id TEXT,                -- anskaffelsesforløp (TED procedure-identifier, ellers egen id)
+    duplicate_of TEXT,                -- kunngjøringen som telles, hvis denne er et duplikat
+    dup_rule TEXT,                    -- hvilken regel som slo dem sammen
+    value_note TEXT,                  -- verdikontroll: hvorfor verdien er usikker
+    cn_ref TEXT,                      -- konkurransekunngjøringen fristen er hentet fra
+    cn_accelerated INTEGER            -- akselerert frist oppgitt i konkurransekunngjøringen
+);
+
+-- Kundens fakturadata. Bare i kundens database; sendes aldri til språkmodell eller eksporteres linje for linje.
+CREATE TABLE IF NOT EXISTS invoices (
+    buyer_id TEXT, supplier_orgnr TEXT, supplier_name TEXT, amount REAL, date TEXT, account TEXT, invoice_no TEXT, source_file TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_invoices ON invoices(buyer_id, supplier_orgnr);
+
+-- Konkurransekunngjøringer fra TED (bare fristen), koblet til tildelingene via prosedyre-ID
+CREATE TABLE IF NOT EXISTS ted_competition (
+    procedure_id TEXT PRIMARY KEY,
+    publication_number TEXT,
+    dispatch_date TEXT,               -- sendt til TED; lovens minstefrister regnes herfra
+    deadline TEXT,                    -- tidligste tilbudsfrist / frist for forespørsel om deltakelse
+    procedure TEXT,
+    accelerated INTEGER
+);
 
 CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
+    peer_group TEXT, peer_percentile REAL, peer_tier TEXT,  -- rangering innen oppdragsgivertype × sektor
     cri REAL, klagerisiko REAL,
     repeat_pair_count REAL, prev_contract REAL, winner_market_share_pct REAL,
     award_over_estimate_pct REAL, data_coverage INTEGER,
-    flags TEXT                        -- JSON-liste [{key,label,weight,source}]
+    flags TEXT,                       -- JSON-liste [{key,label,weight,source}]
+    regler TEXT                       -- faste kontrollpunkter [{key,label,why}]
 );
 
 CREATE TABLE IF NOT EXISTS brreg_entities (
@@ -93,7 +125,8 @@ CREATE TABLE IF NOT EXISTS registers (
 );
 -- Kandidatlister fra valg (navn normalisert + fødselsår)
 CREATE TABLE IF NOT EXISTS politicians (
-    navn_norm TEXT, fodselsaar INTEGER, kommunenr TEXT, kommune TEXT, parti TEXT, valgt INTEGER, valg TEXT
+    -- Ikke parti: politisk oppfatning er en særlig kategori (GDPR art. 9), og trengs ikke for koblingen
+    navn_norm TEXT, fodselsaar INTEGER, kommunenr TEXT, kommune TEXT, valgt INTEGER, valg TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_pol ON politicians(navn_norm, fodselsaar);
 -- Sanksjons- og PEP-lister (OpenSanctions, filtrert på Norge)
@@ -140,12 +173,25 @@ def connect(path: Path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
+    if (c := {r[1] for r in con.execute("PRAGMA table_info(observasjon)")}) and "cn_ref" not in c:
+        con.execute("DROP TABLE observasjon")  # bygges på nytt hver kjøring
     con.executescript(SCHEMA)
     cols = {r[1] for r in con.execute("PRAGMA table_info(brreg_roles)")}
     if "fodselsaar" not in cols:  # databaser fra før v2.1
         con.execute("ALTER TABLE brreg_roles ADD COLUMN fodselsaar INTEGER")
     if "klagerisiko" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # fra v2.4
         con.execute("ALTER TABLE scores ADD COLUMN klagerisiko REAL")
+    if "fetched_at" not in {r[1] for r in con.execute("PRAGMA table_info(contracts)")}:  # fra v2.5
+        con.execute("ALTER TABLE contracts ADD COLUMN fetched_at TEXT")
+    if "parti" in {r[1] for r in con.execute("PRAGMA table_info(politicians)")}:  # partiet fjernet (GDPR art. 9)
+        con.execute("ALTER TABLE politicians DROP COLUMN parti")
+        con.commit()
+        con.execute("VACUUM")  # så de slettede verdiene ikke blir liggende i ledige sider
+    for c, t in (("peer_group", "TEXT"), ("peer_percentile", "REAL"), ("peer_tier", "TEXT")):  # sammenligningsgruppe, fra v2.5
+        if c not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:
+            con.execute(f"ALTER TABLE scores ADD COLUMN {c} {t}")
+    if "regler" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # faste kontrollpunkter, fra v2.5
+        con.execute("ALTER TABLE scores ADD COLUMN regler TEXT")
     cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
     for c in ("vurdering", "vurdering_grunn"):  # revisorens vurdering, fra v2.3
         if c not in cols:
@@ -185,15 +231,16 @@ def set_meta(con, key: str, value) -> None:
 CONTRACT_COLS = [
     "id", "source", "url", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "cpv", "nature",
     "method", "accelerated", "justification", "framework", "num_bidders", "est_value", "award_value",
-    "tender_duration_days", "contract_months", "winner_ids", "winner_names", "winner_size", "raw",
+    "tender_duration_days", "contract_months", "winner_ids", "winner_names", "winner_size", "raw", "fetched_at",
 ]
 
 
 def upsert_contracts(con, rows: list[dict]) -> int:
     sql = f"INSERT OR REPLACE INTO contracts({','.join(CONTRACT_COLS)}) VALUES ({','.join('?' * len(CONTRACT_COLS))})"
-    vals = []
+    vals, t = [], now()
     for r in rows:
         r = dict(r)
+        r.setdefault("fetched_at", t)
         for k in ("winner_ids", "winner_names"):
             r[k] = json.dumps(r.get(k) or [], ensure_ascii=False)
         r["raw"] = json.dumps(r.get("raw"), ensure_ascii=False) if r.get("raw") is not None else None
