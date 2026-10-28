@@ -32,7 +32,7 @@ export default function Overview() {
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 2xl:grid-cols-6">
         <Kpi to="/arbeid" label="Kontrakter" value={int(s.n)} sub={sources} />
-        <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt" />
+        <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt (rangering, ikke sannsynlighet)" />
         <Kpi to="/arbeid?tier=Forhøyet" label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
         <Kpi to="/arbeid?flag=single_bid" label="Kun ett tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med tilbudstall" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
         <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Uten konkurranse" compare={vs(s.direct_pct, s.national?.direct_pct)} />
@@ -90,7 +90,7 @@ export default function Overview() {
             </ul>
           ) : <Skeleton className="h-64" />}
         </Card>
-        <Card title="Prioritet per sektor">
+        <Card title="Prioritet per sektor" desc="Snittprioritet per sektor. Rangeringen er nasjonal, så forskjeller kan skyldes hvordan sektorene kjøper, ikke risiko.">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs text-muted"><th className="pb-2 font-normal">Sektor</th><th className="pb-2 text-right font-normal">Antall</th><th className="pb-2 text-right font-normal">Ett tilbud</th><th className="w-24 pb-2 pl-3 font-normal">Snitt</th></tr></thead>
             <tbody>

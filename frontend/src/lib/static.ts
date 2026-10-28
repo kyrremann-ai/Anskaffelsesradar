@@ -250,8 +250,11 @@ export async function exportCsv(params: Record<string, unknown>) {
   const { rows } = await load();
   const p = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
   const cols = ["id", "pub_date", "title", "buyer", "region", "sector", "method", "num_bidders", "est_value", "award_value",
-    "priority", "tier", "cri", "klagerisiko"];
-  const lines = [[...cols, "leverandører", "flagg", "sak"].join(";")];
+    "priority", "percentile", "tier", "cri", "klagerisiko"];
+  // Kolonnenavnene sier at prioritet og klagerisiko er rangeringer, ikke sannsynligheter
+  const head: Record<string, string> = { priority: "prioritet_poeng", percentile: "prioritet_persentil_nasjonalt",
+    tier: "prioritetsnivå_relativt", klagerisiko: "klagerisiko_persentil" };
+  const lines = [[...cols.map((c) => head[c] ?? c), "leverandører", "observasjoner", "sak"].join(";")];
   for (const r of filter(rows, p)) {
     lines.push([...cols.map((c) => nb(r[c])), r.winner_names.join(", "), r.flags.map((f) => f.label).join(", "), caseStatus(r) ?? ""]
       .map((v) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(";"));
@@ -293,13 +296,13 @@ pre{white-space:pre-wrap;background:#f5f5f5;padding:8px}small{color:#666}</style
 <h1>Arbeidspapir: ${esc(d.title)}</h1>
 <p><b>Oppdragsgiver:</b> ${esc(d.buyer)} &nbsp; <b>Kunngjøring:</b> ${esc(d.id)} (${esc(d.pub_date)})<br>
 <b>Status:</b> ${esc(c.status)} &nbsp; <b>Ansvarlig:</b> ${esc(c.assignee || "–")} &nbsp; <b>Utskrevet:</b> ${new Date().toISOString().slice(0, 19)}</p>
-<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}) – røde flagg (CRI) ${fmt(d.cri)}. Klagerisiko (eksperimentell, teller ikke) ${fmt(d.klagerisiko)}.
-Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
+<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}, persentil ${fmt(d.percentile)} nasjonalt) – røde flagg (CRI) ${fmt(d.cri)}. Klagerisiko-persentil (eksperimentell, teller ikke) ${fmt(d.klagerisiko)}.
+Prioriteten er en relativ rangering, ikke en sannsynlighet for regelbrudd. Den sier hva som bør sjekkes først, ikke at noe er galt.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>${esc(d.method)}</td></tr><tr><th>Antall tilbud</th><td>${fmt(d.num_bidders)}</td></tr>
 <tr><th>Estimert verdi</th><td>${fmt(d.est_value)}</td></tr><tr><th>Tildelt verdi</th><td>${fmt(d.award_value)}</td></tr>
 <tr><th>Leverandør(er)</th><td>${esc(d.winner_names.join(", "))}</td></tr><tr><th>Kilde</th><td>${esc(d.url ?? d.source)}</td></tr></table>
-<h2>Røde flagg</h2><ul>${flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>${sup || "<li>–</li>"}</ul>
+<h2>Observasjoner (flagg)</h2><ul>${flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>${sup || "<li>–</li>"}</ul>
 <h2>Notat</h2><pre>${esc(c.note)}</pre>
 <h2>Logg</h2><table><tr><th>Tid</th><th>Hvem</th><th>Felt</th><th>Fra</th><th>Til</th></tr>${ev}</table></html>`;
   await save(`arbeidspapir-${key}.html`, html);

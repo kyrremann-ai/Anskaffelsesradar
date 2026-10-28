@@ -36,7 +36,7 @@ export default function Method() {
           </ol>
           <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = (CRI + register) / 1,2</p>
           <p className="mt-2 text-sm text-muted">Maskinlæringsmodellene fra eksamensrapporten (trent på syntetiske data) er fjernet fordi de ikke traff bedre enn tilfeldig på ekte KOFA-saker. Revisorenes vurderinger i saksmappen samles inn som fasit for nye modeller.</p>
-          <p className="mt-2 text-sm text-muted">Høy prioritet = topp 5 % nasjonalt, forhøyet = persentil 80–95. Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
+          <p className="mt-2 text-sm text-muted"><b>Prioritet er en relativ rangering, ikke en sannsynlighet.</b> Høy = topp 5 % nasjonalt, forhøyet = persentil 80–95. Også et datasett med bare uproblematiske anskaffelser har en topp 5 %, så nivået sier hva som bør sjekkes først, ikke at noe er galt.</p>
           <p className="mt-2 text-sm text-muted">
             <b>AI-vurdering:</b> {STATIC
               ? "I denne demoen skriver Claude (Anthropic) vurderingen, på den innloggede brukerens Claude-konto."
@@ -48,7 +48,7 @@ export default function Method() {
           <ul className="divide-y divide-line text-sm">{m.flags.map((f) => (
             <li key={f.key} className="flex justify-between py-1.5"><span>{f.label}</span><span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
           </ul>
-          <p className="mt-2 text-xs text-muted">«Ingen reell konkurranse» gjelder både kontrakter med ett tilbud og direkte tildelinger uten oppgitt tilbudstall. Overskridelse på rammeavtaler får halv vekt, fordi de ofte oppgir maksverdi.</p>
+          <p className="mt-2 text-xs text-muted">Flaggene beskriver hva kunngjøringen viser, ikke en tolkning. «Ett registrert tilbud» krever at kunngjøringen oppgir ett tilbud. Direkte tildeling har eget flagg. Overskridelse på rammeavtaler får halv vekt, fordi de ofte oppgir maksverdi.</p>
         </Card>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -74,7 +74,7 @@ export default function Method() {
           </ul>
         </Card>
         {m.klagerisiko && (
-          <Card title="Klagerisiko (eksperimentell)" desc="Sannsynlighet for at en anskaffelse havner i KOFA. Vises ved siden av flaggene og teller ikke i prioriteten.">
+          <Card title="Klagerisiko (eksperimentell)" desc="Rangering (persentil) av hvor mye en anskaffelse ligner dem som er klaget inn til KOFA. Ikke en sannsynlighet. Vises ved siden av flaggene og teller ikke i prioriteten.">
             <p className="text-sm">
               Logistisk regresjon trent på {m.klagerisiko.metrics.positive} Doffin-konkurranser som ble klaget inn til KOFA, mot et tilfeldig utvalg
               av {(m.klagerisiko.metrics.n - m.klagerisiko.metrics.positive).toLocaleString("nb-NO")} konkurranser fra 2019–2026. Kryssvalidert AUC{" "}

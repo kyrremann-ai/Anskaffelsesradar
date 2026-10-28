@@ -36,16 +36,16 @@ FEATURES = [
 FEATURE_LABELS = {
     "est_value_mnok": "Kontraktsverdi", "num_bidders": "Antall tilbud", "is_single_bid": "Ett tilbud",
     "tender_duration_days": "Tilbudsfrist", "contract_months": "Varighet",
-    "repeat_pair_count": "Tidligere tildelinger, samme par", "prev_contract": "Tidligere kontrakt med vinner",
+    "repeat_pair_count": "Tidligere tildelinger, samme par", "prev_contract": "Tidligere tildeling til samme leverandør",
     "winner_market_share_pct": "Vinners markedsandel", "award_over_estimate_pct": "Tildelt mot estimat",
     "m_direct": "Direkte tildeling", "m_negotiated": "Forhandlet prosedyre", "m_restricted": "Begrenset prosedyre",
 }
 # Røde flagg med vekter fra Fazekas et al. (2013), som i rapporten.
 FLAG_LABELS = {
-    "single_bid": ("Ingen reell konkurranse", 1.8), "direct": ("Direkte tildeling", 1.3),
-    "repeat": ("Gjentatte tildelinger (>3)", 1.5), "overrun": ("Tildelt >20 % over estimat", 1.2),
-    "low_comp": ("Kun to tilbud", 0.8), "prev": ("Tidligere kontrakt med vinner", 0.5),
-    "accel": ("Akselerert prosedyre", 0.7), "share": ("Markedsandel >30 %", 0.4),
+    "single_bid": ("Ett registrert tilbud", 1.8), "direct": ("Direkte tildeling", 1.3),
+    "repeat": ("Over tre tildelinger til samme leverandør", 1.5), "overrun": ("Tildelt >20 % over estimat", 1.2),
+    "low_comp": ("To registrerte tilbud", 0.8), "prev": ("Tidligere tildeling til samme leverandør", 0.5),
+    "accel": ("Akselerert prosedyre oppgitt", 0.7), "share": ("Leverandøren har over 30 % av oppdragsgiverens kontraktsverdi", 0.4),
 }
 CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
 # Register-tillegg i prioritetsscoren. Dokumentert på metodesiden.
@@ -156,7 +156,8 @@ def rule_flags(r) -> list[dict]:
     f = []
     nb = r.num_bidders
     direct = r.method == "Direkte tildeling"
-    if nb == 1 or (direct and pd.isna(nb)):
+    # Observasjon, ikke tolkning: bare når kunngjøringen oppgir ett tilbud. Direkte tildeling har eget flagg.
+    if nb == 1:
         f.append("single_bid")
     if direct:
         f.append("direct")
