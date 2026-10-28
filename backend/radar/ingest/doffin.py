@@ -92,6 +92,10 @@ def _headers(api_key: str) -> dict:
     return h
 
 
+class RateLimited(RuntimeError):
+    """Doffin svarte 429 også etter at vi ventet. Det vi har hentet så langt brukes likevel."""
+
+
 def _get(client: httpx.Client, params: dict, tries: int = 6) -> dict:
     for i in range(tries):
         r = None
@@ -104,6 +108,8 @@ def _get(client: httpx.Client, params: dict, tries: int = 6) -> dict:
             pass
         after = r.headers.get("Retry-After") if r is not None else None
         time.sleep(float(after) if after and after.isdigit() else min(60, 2 ** i * 2))
+    if r is not None and r.status_code == 429:
+        raise RateLimited("Doffin: 429 Too Many Requests etter flere forsøk")
     if r is not None:
         r.raise_for_status()
     raise RuntimeError("Doffin svarte ikke etter flere forsøk")
@@ -122,7 +128,11 @@ def search_results(api_key: str, since: str, until: date | None = None, log=prin
             while True:
                 params = {"numHitsPerPage": PER_PAGE, "page": page, "sortBy": "PUBLICATION_DATE_ASC",
                           "type": RESULT_TYPES, "issueDateFrom": start.isoformat(), "issueDateTo": end.isoformat()}
-                j = _get(client, params)
+                try:
+                    j = _get(client, params)
+                except RateLimited as e:
+                    log(f"  {e}; bruker de {len(out)} som er hentet, resten tas neste natt")
+                    return list(out.values())
                 hits = j.get("hits") or []
                 for h in hits:
                     out[h["id"]] = h
@@ -179,6 +189,10 @@ def _dupe_key(r: dict) -> tuple:
 def refresh(con, api_key: str, since: str, log=print) -> list[dict]:
     """Nye Doffin-tildelinger som ikke allerede finnes fra TED (samme kjøper og vinnere innen 14 dager)."""
     known = {r["id"] for r in con.execute("SELECT id FROM contracts WHERE source='doffin'")}
+    # Bare siste måneder hvis vi har hentet før: færre kall, og under grensen på 30 kall i minuttet
+    last = con.execute("SELECT MAX(pub_date) AS d FROM contracts WHERE source='doffin'").fetchone()["d"]
+    if last and (d := _date(last)):
+        since = max(since, (d - timedelta(days=45)).isoformat())
     ted: dict[tuple, list[date]] = {}
     for r in con.execute("SELECT buyer_id, winner_ids, pub_date FROM contracts WHERE source='ted'"):
         k = (r["buyer_id"], tuple(sorted(json.loads(r["winner_ids"] or "[]"))))

@@ -89,11 +89,13 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
     return out
 
 
-def _source(name: str, fn, sources: dict) -> None:
+def _source(name: str, fn, sources: dict, note: str | None = None) -> None:
     """Kjører én kilde. En feil stopper ikke resten av oppdateringen."""
     try:
         n = fn()
         sources[name] = {"status": "ok" if n is not None else "av", "rows": n, "at": db.now()}
+        if n is not None and note:
+            sources[name]["note"] = note
     except Exception as e:  # noqa: BLE001
         sources[name] = {"status": "feil", "error": str(e)[:300], "at": db.now()}
         _log(f"{name} feilet: {e}")
@@ -101,8 +103,10 @@ def _source(name: str, fn, sources: dict) -> None:
 
 def live_sources(con) -> dict:
     s, src = settings, {}
-    _source("Brønnøysundregistrene", lambda: brreg.refresh(con, s.brreg_user_agent, s.person_salt, log=_log), src)
-    _source("Regnskapsregisteret", lambda: regnskap.refresh(con, s.brreg_user_agent, log=_log) if s.regnskap else None, src)
+    # Brreg og regnskap hentes bare for nye leverandører; 0 betyr at alt allerede er lagret
+    _source("Brønnøysundregistrene", lambda: brreg.refresh(con, s.brreg_user_agent, s.person_salt, log=_log), src, "nye siden sist")
+    _source("Regnskapsregisteret", lambda: regnskap.refresh(con, s.brreg_user_agent, log=_log) if s.regnskap else None, src,
+            "nye siden sist")
     _source("Proff API", lambda: owners.refresh_proff(con, s.proff_api_key, s.proff_base_url, s.proff_auth_scheme, log=_log)
             if s.proff_api_key else None, src)
     _source("Renholdsregisteret", lambda: registers.refresh(con, "renhold", s.renhold_register_url, log=_log)
@@ -137,7 +141,7 @@ def run(con, demo: bool | None = None) -> None:
             doffin_src: dict = {}
             if settings.doffin:
                 _source("Doffin", lambda: db.upsert_contracts(
-                    con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src)
+                    con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src, "nye siden sist")
             sources = doffin_src | live_sources(con)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")

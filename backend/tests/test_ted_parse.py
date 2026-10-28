@@ -42,3 +42,21 @@ def test_parse_doffin_hit():
     assert c["winner_ids"] == ["912345678"] and c["num_bidders"] == 1 and c["est_value"] == 900000
     assert c["sector"] == "Miljø og renovasjon" and c["pub_date"] == "2026-02-01"
     assert parse_hit({**h, "lots": []}) is None
+
+
+def test_doffin_rate_limit_keeps_partial(monkeypatch):
+    from datetime import date
+
+    from radar.ingest import doffin
+    calls = []
+
+    def fake_get(client, params, tries=6):
+        calls.append(params["issueDateFrom"])
+        if len(calls) > 1:
+            raise doffin.RateLimited("429")
+        return {"hits": [{"id": "2026-1"}], "numHitsAccessible": 1}
+
+    monkeypatch.setattr(doffin, "_get", fake_get)
+    monkeypatch.setattr(doffin, "PAUSE", 0)
+    out = doffin.search_results("", "2026-01-01", until=date(2026, 3, 31), log=lambda *_: None)
+    assert [h["id"] for h in out] == ["2026-1"] and len(calls) == 2
