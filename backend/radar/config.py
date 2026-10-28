@@ -53,7 +53,7 @@ class Settings:
 
     @property
     def import_dir(self) -> Path:
-        """Filer lagt her importeres ved neste oppdatering: aksjonaer*.csv, kandidat*.csv, kofa*.csv/json."""
+        """Filer lagt her importeres ved neste oppdatering: aksjonaer*.csv, kandidat*.csv, kofa*.csv/json, bemanning*.json."""
         return self.data_dir / "import"
 
     @property

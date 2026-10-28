@@ -65,6 +65,11 @@ def test_register_json_parse():
     assert [(r["orgnr"], r["status"]) for r in rows] == [(S1, "Godkjent"), ("987654321", "Godkjent"), (S2, "Ikke godkjent")]
 
 
+def test_bemanning_api_parse():
+    rows = registers.parse((FX / "bemanning.json").read_bytes())
+    assert [(r["orgnr"], r["status"]) for r in rows] == [(S1, "Godkjent"), ("333333333", "Godkjent"), (S2, "Ikke godkjent")]
+
+
 def test_valg_parse():
     rows = valg.parse((FX / "kandidater.csv").read_text())
     assert len(rows) == 2 and rows[0] == {"navn_norm": "kari nordmann", "fodselsaar": 1970, "kommunenr": "0301",

@@ -64,8 +64,8 @@ def load_demo(con) -> dict:
             "Kandidatlister": len(x["politicians"]), "OpenSanctions": len(x["sanctions"]), "KOFA": n}
 
 
-def _imports(con) -> dict[str, int]:
-    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA)."""
+def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
+    """Importerer filer fra data/import/ (aksjonærregister, kandidatlister, KOFA, bemanningsregister)."""
     d, out = settings.import_dir, {}
     if not d.exists():
         return out
@@ -84,6 +84,11 @@ def _imports(con) -> dict[str, int]:
         rows = valg.parse(text)
         valg.store(con, rows, f.stem)
         out["Kandidatlister"] = out.get("Kandidatlister", 0) + len(rows)
+    # Bemanningsregisteret lagret fra nettleseren (API-et avviser skyservere). Brukes bare når live-hentingen ikke lyktes.
+    for f in ([] if "Bemanningsregisteret" in live_ok else sorted(d.glob("bemanning*.json"))[-1:]):
+        rows = registers.parse(f.read_bytes())
+        registers.store(con, "bemanning", rows)
+        out["Bemanningsregisteret"] = len(rows)
     kf = sorted([*d.glob("kofa*.csv"), *d.glob("kofa*.json")])
     for f in kf:
         kofa.store(con, kofa.parse(f.read_text(encoding="utf-8-sig")))
@@ -116,7 +121,7 @@ def live_sources(con) -> dict:
     _source("OpenSanctions", lambda: sanctions.refresh(con, s.opensanctions_url, s.opensanctions_api_key, log=_log)
             if s.opensanctions_url else None, src)
     try:
-        for name, n in _imports(con).items():
+        for name, n in _imports(con, {k for k, v in src.items() if v.get("status") == "ok"}).items():
             src[name] = {"status": "ok", "rows": n, "at": db.now(), "note": "fra fil"}
     except Exception as e:  # noqa: BLE001
         src["Filimport"] = {"status": "feil", "error": str(e)[:300], "at": db.now()}
