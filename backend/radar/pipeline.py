@@ -137,7 +137,7 @@ def run(con, demo: bool | None = None) -> None:
             db.upsert_contracts(con, rows)
             _log(f"Lagret {len(rows)} nye kontrakter fra TED")
             doffin_src: dict = {}
-            if settings.doffin_api_key:
+            if settings.doffin:
                 _source("Doffin", lambda: db.upsert_contracts(
                     con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src)
             sources = doffin_src | live_sources(con)

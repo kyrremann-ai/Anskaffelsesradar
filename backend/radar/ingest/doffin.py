@@ -52,12 +52,12 @@ def signals(hit: dict, buyer_stats: dict[str, dict]) -> list[dict]:
 
 
 def latest(api_key: str, q: str = "", page: int = 1, per_page: int = 50, buyer_stats: dict | None = None) -> dict:
-    if not api_key:
-        return {"total": 0, "hits": [], "error": "DOFFIN_API_KEY mangler. Hent gratis nøkkel hos DFØ."}
     params = {"numHitsPerPage": per_page, "page": page, "sortBy": "PUBLICATION_DATE_DESC"}
     if q:
         params["searchString"] = q
-    r = httpx.get(SEARCH_URL, params=params, headers={"Ocp-Apim-Subscription-Key": api_key}, timeout=30)
+    r = httpx.get(SEARCH_URL, params=params, headers=_headers(api_key), timeout=30)
+    if r.status_code == 401:
+        return {"total": 0, "hits": [], "error": "Doffin avviste kallet. Sett DOFFIN_API_KEY (gratis nøkkel hos DFØ)."}
     r.raise_for_status()
     j = r.json()
     hits = []
@@ -84,6 +84,14 @@ PER_PAGE = 100
 PAUSE = 2.1
 
 
+def _headers(api_key: str) -> dict:
+    # Uten nøkkel her kan en proxy legge på headeren (slik skymiljøet gjør med hemmeligheter)
+    h = {"User-Agent": "Anskaffelsesradar/2.0"}
+    if api_key:
+        h["Ocp-Apim-Subscription-Key"] = api_key
+    return h
+
+
 def _get(client: httpx.Client, params: dict, tries: int = 6) -> dict:
     for i in range(tries):
         r = None
@@ -107,7 +115,7 @@ def search_results(api_key: str, since: str, until: date | None = None, log=prin
     until = until or date.today()
     start = date.fromisoformat(since)
     out: dict[str, dict] = {}
-    with httpx.Client(headers={"Ocp-Apim-Subscription-Key": api_key, "User-Agent": "Anskaffelsesradar/2.0"}) as client:
+    with httpx.Client(headers=_headers(api_key)) as client:
         while start <= until:
             end = min(until, (start.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1))
             page = 1
@@ -156,7 +164,8 @@ def parse_hit(h: dict) -> dict | None:
         # Søket oppgir ikke prosedyre; varsel om intensjon betyr planlagt direkte tildeling
         "method": "Direkte tildeling" if "ANNOUNCEMENT_OF_INTENT" in types else "Annet",
         "accelerated": 0, "justification": None, "framework": 0,
-        "num_bidders": h.get("receivedTenders"), "est_value": est, "award_value": None,
+        # Intensjonskunngjøringer har 0 mottatte tilbud: det er én leverandør uten konkurranse
+        "num_bidders": h.get("receivedTenders") or (1 if "ANNOUNCEMENT_OF_INTENT" in types else None), "est_value": est, "award_value": None,
         "tender_duration_days": None, "contract_months": None,
         "winner_ids": list(winners), "winner_names": list(winners.values()), "winner_size": None,
         "raw": {"doffin_type": h.get("type"), "location": loc},

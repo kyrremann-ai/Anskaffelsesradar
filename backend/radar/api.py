@@ -127,7 +127,7 @@ def health():
 def meta():
     return {"mode": db.get_meta(con, "mode", settings.mode), "updated_at": db.get_meta(con, "updated_at"),
             "refresh": pipeline.status, "llm": "mistral" if settings.mistral_api_key else "mal",
-            "doffin": bool(settings.doffin_api_key), "case_statuses": CASE_STATUSES,
+            "doffin": settings.doffin, "case_statuses": CASE_STATUSES,
             "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
             "sources": db.get_meta(con, "sources") or {}}
 
