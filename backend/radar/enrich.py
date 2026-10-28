@@ -16,7 +16,7 @@ FLAGS = {
     "own_shared_suppliers": ("Felles eier med konkurrerende leverandør", 1.2, "Aksjonærregisteret / Proff"),
     "own_buyer_person": ("Eier har rolle hos oppdragsgiver", 2.0, "Aksjonærregisteret + Brreg"),
     "own_buyer_owns": ("Oppdragsgiver eier leverandøren", 0.3, "Aksjonærregisteret"),
-    "pol_link": ("Mulig kobling til lokalpolitiker", 1.5, "Kandidatlister (0,8 hvis ikke valgt)"),
+    "pol_link": ("Ubekreftet navnetreff mot lokalpolitiker", 1.5, "Kandidatlister (0,8 hvis ikke valgt)"),
     "sanc_org": ("Leverandør på sanksjons-/risikoliste", 2.0, "OpenSanctions (0,8 uten sanksjon)"),
     "sanc_person": ("Rolleinnehaver/eier sanksjonert", 2.0, "OpenSanctions"),
     "pep_person": ("Rolleinnehaver/eier er PEP", 0.8, "OpenSanctions"),
@@ -133,7 +133,7 @@ class ExtraIndex:
                     if not buyer_kommune or not p["kommunenr"] or p["kommunenr"] == buyer_kommune]
             if pols:
                 valgt = any(p["valgt"] for p in pols)
-                add("pol_link", "Mulig kobling til lokalpolitiker", 1.5 if valgt else 0.8,
+                add("pol_link", "Ubekreftet navnetreff mot lokalpolitiker", 1.5 if valgt else 0.8,
                     f"{len(pols)} treff på navn + fødselsår ({'valgt' if valgt else 'kandidat'}), {pols[0]['kommune'] or pols[0]['kommunenr'] or ''}".strip(", "),
                     "valg")
 

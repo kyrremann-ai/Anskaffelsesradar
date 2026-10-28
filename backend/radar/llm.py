@@ -1,4 +1,4 @@
-"""LLM-adapter for AI-vurdering. Mistral (EU) som standard, byttbar.
+"""LLM-adapter for AI-vurdering. Mistral (EU) eller Claude (Anthropic), byttbar.
 
 Personvern: vi sender bare kontraktsfelt og flagg. Aldri navn fra Brreg-roller.
 Uten API-nøkkel brukes en regelbasert mal, så appen virker uten LLM.
@@ -44,6 +44,24 @@ class MistralProvider:
         return r.json()["choices"][0]["message"]["content"].strip()
 
 
+class ClaudeProvider:
+    name = "claude"
+
+    def __init__(self, api_key: str, model: str):
+        self.api_key, self.model = api_key, model
+
+    def complete(self, prompt: str) -> str:
+        r = httpx.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
+            json={"model": self.model, "max_tokens": 600, "temperature": 0.2, "system": SYSTEM,
+                  "messages": [{"role": "user", "content": prompt}]},
+            timeout=60,
+        )
+        r.raise_for_status()
+        return "".join(b.get("text", "") for b in r.json()["content"] if b.get("type") == "text").strip()
+
+
 class TemplateProvider:
     """Fallback uten LLM: setter sammen vurderingen fra flagg og nøkkeltall."""
     name, model = "mal", "regelbasert"
@@ -66,8 +84,14 @@ class TemplateProvider:
         return f"**Vurdering:** Kontrakten {level} (prioritet {d.get('Prioritet')}).\n**Hvorfor:**\n" + "\n".join(why) + "\n**Sjekk dette:**\n" + "\n".join(checks)
 
 
-def provider(api_key: str, model: str) -> Provider:
-    return MistralProvider(api_key, model) if api_key else TemplateProvider()
+def provider(s) -> Provider:
+    """Velger leverandør fra innstillingene. LLM_PROVIDER=claude|mistral overstyrer; ellers den nøkkelen som finnes."""
+    want = (s.llm_provider or "").lower()
+    if s.anthropic_api_key and (want == "claude" or (not want and not s.mistral_api_key)):
+        return ClaudeProvider(s.anthropic_api_key, s.claude_model)
+    if s.mistral_api_key and want != "claude":
+        return MistralProvider(s.mistral_api_key, s.mistral_model)
+    return TemplateProvider()
 
 
 def build_input(c: dict) -> dict:
