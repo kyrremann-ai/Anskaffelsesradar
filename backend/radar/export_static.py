@@ -38,6 +38,7 @@ def export(out: Path, log=print) -> dict[str, int]:
     df = api.frame()
     bundle = pipeline.bundle()
     X = feature_frame(df)
+    journal = {r["contract_id"]: json.loads(r["items"]) for r in api.con.execute("SELECT contract_id, items FROM einnsyn")}
     rows = []
     for i, r in df.iterrows():
         o = api.row_out(r, full=True)
@@ -45,6 +46,8 @@ def export(out: Path, log=print) -> dict[str, int]:
         o.pop("case_status", None)
         o["winner"] = r.winner if isinstance(r.winner, str) else None
         o["drivers"] = bundle.drivers(X.loc[i])
+        if r.id in journal:
+            o["einnsyn"] = journal[r.id]
         rows.append(o)
     bi = api.brreg_index()
     orgs = sorted({o for ws in df.winner_ids for o in ws} | set(df.buyer_id))

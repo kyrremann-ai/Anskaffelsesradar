@@ -22,7 +22,7 @@ from . import db, llm, pipeline
 from .config import settings
 from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
-from .ingest import doffin
+from .ingest import doffin, einnsyn
 from .ingest.brreg import BrregIndex
 from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, model_info
 
@@ -278,6 +278,7 @@ def contract_detail(cid: str):
     bi = brreg_index()
     out["suppliers"] = [_supplier_card(bi, o) for o in r.winner_ids]
     out["case"] = _case(cid)
+    out["einnsyn"] = einnsyn.for_contract(con, cid)
     out["assessments"] = [dict(a) for a in con.execute(
         "SELECT id, at, provider, model, text FROM assessments WHERE contract_id=? ORDER BY id DESC", (cid,))]
     return out

@@ -257,6 +257,27 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         </dl>
       </Section>
 
+      {d.einnsyn != null && (
+        <Section title="Postjournal hos oppdragsgiveren (eInnsyn)">
+          {d.einnsyn.length === 0 ? (
+            <p className="text-sm text-muted">Ingen journalposter med leverandøren som avsender eller mottaker. Mange kommuner publiserer ikke i eInnsyn, så det betyr ikke at dokumentene mangler.</p>
+          ) : (
+            <ul className="divide-y divide-line rounded-md border border-line">
+              {d.einnsyn.map((j, i) => (
+                <li key={i} className="px-3 py-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    {j.url ? <a href={j.url} target="_blank" rel="noreferrer" className="min-w-0 truncate text-accent hover:underline">{j.title}</a>
+                      : <span className="min-w-0 truncate">{j.title}</span>}
+                    <span className="num shrink-0 text-xs text-muted">{j.date ? date(j.date) : ""}</span>
+                  </div>
+                  {j.case && <div className="truncate text-xs text-muted">Sak: {j.case}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
       {d.sameSupplier.length > 0 && (
         <Section title="Andre tildelinger, samme oppdragsgiver og leverandør">
           <ul className="divide-y divide-line rounded-md border border-line">

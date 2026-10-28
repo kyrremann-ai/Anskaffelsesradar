@@ -52,7 +52,10 @@ export type ContractDetail = ContractRow & {
   ml_lr: number; ml_rf: number; ml_gb: number; drivers: { feature: string; effect: number }[];
   sameSupplier: { id: string; title: string; pub_date: string; tier: Tier }[];
   suppliers: SupplierCard[]; case: Case | null; assessments: Assessment[];
+  // null = ikke slått opp (bare høy/forhøyet prioritet slås opp)
+  einnsyn?: JournalPost[] | null;
 };
+export type JournalPost = { title: string | null; date: string | null; type: string | null; case: string | null; url: string | null };
 
 export type Stats = {
   n: number; n_high: number; n_elevated: number; single_bid_pct: number | null; direct_pct: number | null;

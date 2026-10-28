@@ -13,7 +13,7 @@ import traceback
 
 from . import db
 from .config import settings
-from .ingest import brreg, doffin, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .scoring import ModelBundle, kofa_training, score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
@@ -150,6 +150,9 @@ def run(con, demo: bool | None = None) -> None:
             _log(f"Trener på nytt med {len(real[1])} KOFA-merkede kontrakter")
             _bundle = ModelBundle(settings.seed, real)
         score_all(con, bundle(), log=_log)
+        if not demo and settings.einnsyn:
+            # Etter scoring, siden bare prioriterte kontrakter slås opp
+            _source("eInnsyn", lambda: einnsyn.refresh(con, log=_log), sources)
         with db.tx(con):
             db.set_meta(con, "sources", sources)
         with db.tx(con):
