@@ -1,0 +1,22 @@
+# Tilgangsstyring for radar.vikingsea.no uten å kjøre noe lokalt. Kjør fra Actions-fanen.
+name: Radar-tilgang
+on:
+  workflow_dispatch:
+    inputs:
+      kommando:
+        type: choice
+        options: [grant, revoke, list, who, setup]
+        default: grant
+      epost:
+        description: "E-post (for grant/revoke)"
+        required: false
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EPOST: ${{ inputs.epost }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: python deploy/cf_radar.py "${{ inputs.kommando }}" $EPOST
