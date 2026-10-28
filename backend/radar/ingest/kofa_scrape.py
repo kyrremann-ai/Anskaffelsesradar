@@ -174,7 +174,8 @@ def parse_detail(html: str) -> dict:
     if g:
         out["gebyr"] = re.sub(r"\D", "", g.group(1))
     # Sammendraget: første lange avsnitt som ikke er en etikett
-    out["sammendrag"] = next((l for l in lines if len(l) > 120 and not any(l.startswith(k) for k in DETAIL_LABELS)), "")
+    out["sammendrag"] = next((l for l in lines if len(l) > 80 and not any(l.startswith(k) for k in DETAIL_LABELS)
+                              and "informasjonskapsler" not in l.lower()), "")
     return out
 
 
