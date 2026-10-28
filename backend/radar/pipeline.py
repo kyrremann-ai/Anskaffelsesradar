@@ -172,3 +172,5 @@ if __name__ == "__main__":
     ap.add_argument("--demo", action="store_true")
     a = ap.parse_args()
     run(db.connect(settings.db_path), demo=True if a.demo else None)
+    if status["error"]:
+        raise SystemExit(f"Oppdateringen feilet: {status['error']}")

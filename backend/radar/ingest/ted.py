@@ -56,6 +56,27 @@ SECTOR = {
 }
 
 
+def _wait(r: httpx.Response | None, attempt: int) -> None:
+    """TED begrenser antall kall (429). Vent det API-et ber om, ellers eksponentielt."""
+    after = r.headers.get("Retry-After") if r is not None else None
+    time.sleep(float(after) if after and after.isdigit() else min(60, 2 ** attempt * 2))
+
+
+def _post(client: httpx.Client, body: dict, tries: int = 8) -> httpx.Response:
+    for i in range(tries):
+        r = None
+        try:
+            r = client.post(SEARCH_URL, json=body, timeout=60)
+            if r.status_code not in (429, 500, 502, 503, 504):
+                r.raise_for_status()
+                return r
+        except httpx.TransportError:
+            pass
+        _wait(r, i)
+    r.raise_for_status() if r is not None else None
+    raise RuntimeError("TED svarte ikke etter flere forsøk")
+
+
 def search_publication_numbers(client: httpx.Client, since: str, log=print) -> list[tuple[str, str]]:
     """Returnerer [(publiseringsnummer, publiseringsdato)] for norske tildelinger siden `since` (YYYY-MM-DD)."""
     query = (f"buyer-country=NOR AND notice-type IN ({CAN_TYPES}) "
@@ -67,9 +88,7 @@ def search_publication_numbers(client: httpx.Client, since: str, log=print) -> l
     while True:
         if token:
             body["iterationNextToken"] = token
-        r = client.post(SEARCH_URL, json=body, timeout=60)
-        r.raise_for_status()
-        j = r.json()
+        j = _post(client, body).json()
         for n in j.get("notices", []):
             pd_ = n.get("publication-date") or ""
             out.append((n["publication-number"], str(pd_)[:10]))
@@ -83,7 +102,8 @@ def fetch_xml(client: httpx.Client, pub: str, cache: Path) -> bytes | None:
     f = cache / f"{pub}.xml"
     if f.exists():
         return f.read_bytes()
-    for i in range(4):
+    for i in range(6):
+        r = None
         try:
             r = client.get(XML_URL.format(pub=pub), timeout=60, follow_redirects=True)
             if r.status_code == 200:
@@ -93,7 +113,7 @@ def fetch_xml(client: httpx.Client, pub: str, cache: Path) -> bytes | None:
                 return None
         except httpx.HTTPError:
             pass
-        time.sleep(2 ** i)
+        _wait(r, i)
     return None
 
 

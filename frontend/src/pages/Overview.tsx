@@ -28,7 +28,7 @@ export default function Overview() {
         desc={`${int(s.n)} tildelte kontrakter fra ${int(s.n_buyers)} oppdragsgivere, ${date(s.period[0])} til ${date(s.period[1])}.${sel.length ? " Tallene sammenlignes med hele Norge." : " Velg «Mine enheter» øverst for å se bare dine kommuner og foretak."}`}
         right={<Link to="/arbeid" className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90">Åpne arbeidsflaten →</Link>} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 2xl:grid-cols-6">
         <Kpi label="Kontrakter" value={int(s.n)} sub="TED, tildelt" />
         <Kpi label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt" />
         <Kpi label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />

@@ -51,7 +51,7 @@ export default function Buyers() {
         <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-sunk text-left text-xs text-muted">
             <tr>{["Oppdragsgiver", "Kontrakter", "Flagget", "Ett tilbud", "Direkte", "Tildelt verdi", "Snittprioritet", ""].map((h, i) =>
-              <th key={i} className={cx("px-3 py-2.5 font-medium", i > 0 && i < 6 && "text-right")}>{h}</th>)}</tr>
+              <th key={i} className={cx("whitespace-nowrap px-3 py-2.5 font-medium", i > 0 && i < 6 && "text-right")}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((b) => (
@@ -61,10 +61,10 @@ export default function Buyers() {
                 <td className="num px-3 text-right">{int(b.n_flagged)}</td>
                 <td className="num px-3 text-right">{pct(b.single_bid_pct, 0)}</td>
                 <td className="num px-3 text-right">{pct(b.direct_pct, 0)}</td>
-                <td className="num px-3 text-right">{nok(b.total_value)}</td>
+                <td className="num whitespace-nowrap px-3 text-right">{nok(b.total_value)}</td>
                 <td className="px-3"><div className="flex items-center gap-2"><Meter value={b.avg_score} className="w-20" /><span className="num text-xs">{Math.round(b.avg_score)}</span></div></td>
                 <td className="px-3 text-right">
-                  <button className="text-xs text-accent hover:underline"
+                  <button className="whitespace-nowrap text-xs text-accent hover:underline"
                     onClick={() => setBuyers(mine.includes(b.buyer_id!) ? mine.filter((x) => x !== b.buyer_id) : [...mine, b.buyer_id!])}>
                     {mine.includes(b.buyer_id!) ? "Fjern fra mine" : "Legg til i mine"}
                   </button>

@@ -28,7 +28,7 @@ export function Suppliers() {
         <div className="overflow-x-auto rounded-md border border-line bg-surface">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-sunk text-left text-xs text-muted">
-              <tr><th className="px-3 py-2.5 font-medium">Leverandør</th><th className="px-3 font-medium">Brreg-flagg</th>
+              <tr><th className="min-w-[200px] px-3 py-2.5 font-medium">Leverandør</th><th className="px-3 font-medium">Brreg-flagg</th>
                 <th className="px-3 text-right font-medium">Kontrakter</th><th className="px-3 text-right font-medium">Oppdragsgivere</th>
                 <th className="px-3 text-right font-medium">Verdi</th><th className="px-3 text-right font-medium">Snittprioritet</th></tr>
             </thead>
@@ -44,7 +44,7 @@ export function Suppliers() {
                   </td>
                   <td className="num px-3 text-right">{int(s.n)}</td>
                   <td className="num px-3 text-right">{int(s.n_buyers)}</td>
-                  <td className="num px-3 text-right">{nok(s.total_value)}</td>
+                  <td className="num whitespace-nowrap px-3 text-right">{nok(s.total_value)}</td>
                   <td className="num px-3 text-right font-semibold" style={{ color: scoreColor(s.avg_priority) }}>{Math.round(s.avg_priority)}</td>
                 </tr>
               ))}
