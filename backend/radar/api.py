@@ -65,6 +65,7 @@ def frame() -> pd.DataFrame:
             s = s.drop(columns=[c for c in ("repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct") if c in s])
             df = df.merge(s, on="id", how="inner")
             df["flags"] = df["flags"].map(lambda x: json.loads(x or "[]"))
+            df["regler"] = df["regler"].map(lambda x: json.loads(x or "[]"))
             df["flag_keys"] = df["flags"].map(lambda fl: {f["key"] for f in fl})
         bi = BrregIndex(con)
         _cache.update(key=key, df=df, brreg=bi, extra=ExtraIndex(con, bi.ent))
@@ -108,10 +109,12 @@ def clean(v):
 def row_out(r: pd.Series, full: bool = False) -> dict:
     keys = ["id", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "method", "num_bidders", "est_value",
             "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "cri", "klagerisiko",
-            "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source"]
+            "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source",
+            "notice_type", "regler"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
-                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id", "fetched_at"]
+                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id", "fetched_at",
+                 "procedure_id", "also", "value_note", "cn_ref"]
     return {k: clean(r.get(k)) for k in keys}
 
 
@@ -132,7 +135,7 @@ def meta():
             "refresh": pipeline.status, "llm": llm.provider(settings).name,
             "doffin": settings.doffin, "case_statuses": CASE_STATUSES,
             "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
-            "sources": db.get_meta(con, "sources") or {}}
+            "sources": db.get_meta(con, "sources") or {}, "observasjonsenhet": db.get_meta(con, "observasjonsenhet")}
 
 
 @app.post("/api/refresh")
@@ -167,6 +170,9 @@ def summary(buyers: str | None = None):
     all_ = frame()
     if all_.empty:
         return {"n": 0, "loading": pipeline.status["running"]}
+    intents = scope(all_, buyers)
+    intents = intents[intents.notice_type == "intensjon"]
+    all_ = all_[all_.notice_type == "tildeling"]  # tellingene gjelder kontrakter; intensjoner vises for seg
     df = scope(all_, buyers)
     out = _stats(df) | {"national": _stats(all_) if buyers else None, "n_buyers": int(df.buyer_id.nunique()),
                         "period": [df.pub_date.min(), df.pub_date.max()] if len(df) else [None, None]}
@@ -183,6 +189,12 @@ def summary(buyers: str | None = None):
     out["by_region"] = _group(df, "region")
     out["by_buyer"] = _group(df, "buyer_id", min_n=1 if buyers else 8, name_col="buyer")
     out["cases"] = {s: int(n) for s, n in df.case_status.value_counts().items()}
+    checks: dict[str, list] = {}
+    for rs in pd.concat([df.regler, intents.regler]):
+        for x in rs:
+            checks.setdefault(x["key"], [x["label"], 0])[1] += 1
+    out["regler"] = [{"key": k, "label": v[0], "n": v[1]} for k, v in checks.items()]
+    out["n_intents"] = len(intents)
     return out
 
 
@@ -209,8 +221,15 @@ def _filter(df, q, tier, method, sector, region, flag, supplier, case_status):
     for col, v in (("tier", tier), ("method", method), ("sector", sector), ("region", region)):
         if v:
             df = df[df[col] == v]
-    if flag:
+    # flag=regel:<nøkkel> gir faste kontrollpunkter, flag=type:<kunngjøringstype> gir f.eks. intensjoner
+    if flag.startswith("regel:"):
+        df = df[df.regler.map(lambda rs: any(x["key"] == flag[6:] for x in rs))]
+    elif flag.startswith("type:"):
+        df = df[df.notice_type == flag[5:]]
+    elif flag:
         df = df[df.flag_keys.map(lambda s: flag in s)]
+    if not flag.startswith(("type:", "regel:intensjon")) and tier != "Intensjon":
+        df = df[df.notice_type == "tildeling"]  # listene viser kontrakter; intensjoner har eget filter
     if supplier:
         df = df[df.winner_ids.map(lambda w: supplier in w)]
     if case_status == "uten":

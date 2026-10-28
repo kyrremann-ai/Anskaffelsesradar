@@ -5,8 +5,9 @@ stortingsvalget 2025, med «innvalgt» satt fra Valgdirektoratets lister over va
 Kan også importeres fra nedlastet fil:
     python -m radar.ingest.valg kandidater-2023.csv --valg "Kommunestyrevalget 2023"
 
-Overskriftene matches løst: navn, fødselsår, kommunenummer/kommune, parti.
-Personvern: vi lagrer bare normalisert navn, fødselsår, kommune og parti. Treff vises som
+Overskriftene matches løst: navn, fødselsår, kommunenummer/kommune.
+Personvern: vi lagrer bare normalisert navn, fødselsår, kommune, valgt/kandidat og valg. Parti leses ikke inn
+(politisk oppfatning er en særlig kategori etter GDPR art. 9). Treff vises som
 «mulig kobling» og må alltid verifiseres manuelt (navnelikhet). Gjør en DPIA før produksjon.
 """
 from __future__ import annotations
@@ -80,7 +81,6 @@ def parse_rows(rows: list[list[str]]) -> list[dict]:
     i_aar = _find(h, "fødselsår", "fodselsar", "fødselsdato", "født", "fodt")
     i_knr = _find(h, "kommunenummer", "kommunenr")
     i_kom = _find(h, "kommunenavn", "kommune")
-    i_parti = _find(h, "partinavn", "parti")
     i_valgt = _find(h, "valgt", "innvalgt")
     out = []
     for r in rows[1:]:
@@ -95,7 +95,7 @@ def parse_rows(rows: list[list[str]]) -> list[dict]:
         aar = y.group(0)
         knr = re.sub(r"\D", "", g(i_knr)).zfill(4) if g(i_knr) else None
         out.append({"navn_norm": norm_name(navn), "fodselsaar": int(aar), "kommunenr": knr, "kommune": g(i_kom),
-                    "parti": g(i_parti), "valgt": int(g(i_valgt).lower() in ("ja", "1", "true", "x", "valgt"))})
+                    "valgt": int(g(i_valgt).lower() in ("ja", "1", "true", "x", "valgt"))})
     return out
 
 
@@ -140,8 +140,8 @@ def refresh(con, log=print) -> int:
 def store(con, rows: list[dict], valg: str) -> None:
     with tx(con):
         con.execute("DELETE FROM politicians WHERE valg=?", (valg,))
-        con.executemany("INSERT INTO politicians(navn_norm, fodselsaar, kommunenr, kommune, parti, valgt, valg) VALUES (?,?,?,?,?,?,?)",
-                        [(r["navn_norm"], r["fodselsaar"], r["kommunenr"], r["kommune"], r["parti"], r["valgt"], valg) for r in rows])
+        con.executemany("INSERT INTO politicians(navn_norm, fodselsaar, kommunenr, kommune, valgt, valg) VALUES (?,?,?,?,?,?)",
+                        [(r["navn_norm"], r["fodselsaar"], r["kommunenr"], r["kommune"], r["valgt"], valg) for r in rows])
 
 
 if __name__ == "__main__":

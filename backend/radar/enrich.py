@@ -134,7 +134,7 @@ class ExtraIndex:
             if pols:
                 valgt = any(p["valgt"] for p in pols)
                 add("pol_link", "Ubekreftet navnetreff mot lokalpolitiker", 1.5 if valgt else 0.8,
-                    f"{len(pols)} treff på navn + fødselsår ({'valgt' if valgt else 'kandidat'}), {pols[0]['kommune'] or pols[0]['kommunenr'] or ''}".strip(", "),
+                    f"{len(pols)} treff på navn + fødselsår: {'valgt' if valgt else 'kandidat'} i {pols[0]['kommune'] or pols[0]['kommunenr'] or 'ukjent kommune'}, {pols[0]['valg']}",
                     "valg")
 
             # Sanksjoner og PEP

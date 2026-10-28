@@ -9,12 +9,15 @@ eForms er standard for alle TED-kunngjøringer fra 2024, så 2025+ er dekket.
 """
 from __future__ import annotations
 
+import json
 import time
 import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
 
 import httpx
+
+from ..db import tx
 
 SEARCH_URL = "https://api.ted.europa.eu/v3/notices/search"
 NOTICE_URL = "https://ted.europa.eu/en/notice/-/detail/{pub}"
@@ -159,7 +162,8 @@ def parse_notice(xml: bytes, pub: str, pub_date: str) -> dict | None:
         "est_value": est, "award_value": award, "tender_duration_days": None, "contract_months": months,
         "winner_ids": [orgs[w]["orgnr"] or w for w in winners], "winner_names": [orgs[w]["name"] for w in winners],
         "winner_size": SIZE.get(orgs[winners[0]]["size"] or "", None) if winners else None,
-        "raw": {"procedure": proc_code, "reasons": reasons, "buyer_nuts": buyer.get("nuts")},
+        "raw": {"procedure": proc_code, "reasons": reasons, "buyer_nuts": buyer.get("nuts"),
+                "procedure_id": _t(root, "cbc:ContractFolderID")},
     }
 
 
@@ -170,7 +174,7 @@ FIELDS = ["publication-number", "publication-date", "notice-title", "buyer-name"
           "direct-award-justification-proc", "classification-cpv", "contract-nature", "result-value-notice",
           "result-value-cur-notice", "result-value-lot", "estimated-value-proc", "estimated-value-lot",
           "received-submissions-type-code", "received-submissions-type-val", "framework-agreement-lot",
-          "contract-framework-agreement", "duration-period-value-lot", "duration-period-unit-lot"]
+          "contract-framework-agreement", "duration-period-value-lot", "duration-period-unit-lot", "procedure-identifier"]
 
 
 def search_notices(client: httpx.Client, since: str, log=print) -> list[dict]:
@@ -234,8 +238,10 @@ def parse_fields(n: dict) -> dict | None:
         winners.setdefault(w, names[i] if i < len(names) else w)
     award = _f(_first(n.get("result-value-notice"))) or _sum(n.get("result-value-lot"))
     est = _f(_first(n.get("estimated-value-proc"))) or _sum(n.get("estimated-value-lot"))
-    if (_first(n.get("result-value-cur-notice")) or "NOK") != "NOK":
+    value_note = None
+    if (cur := _first(n.get("result-value-cur-notice")) or "NOK") != "NOK":
         award = est = None
+        value_note = f"Verdi oppgitt i {cur}, ikke tatt med"
     months = None
     if (d := _f(_first(n.get("duration-period-value-lot")))) is not None:
         unit = (_first(n.get("duration-period-unit-lot")) or "MONTH").upper()
@@ -262,9 +268,68 @@ def parse_fields(n: dict) -> dict | None:
         "winner_size": SIZE.get(_first(n.get("winner-size")) or "", None),
         "raw": {"procedure": proc, "reasons": {"accelerated-procedure": str(accelerated).lower(),
                                                **({"direct-award-justification": justification} if justification else {})},
-                "buyer_nuts": nuts},
+                "buyer_nuts": nuts, "procedure_id": _first(n.get("procedure-identifier")),
+                **({"value_note": value_note} if value_note else {})},
     }
 
+
+
+def backfill_procedures(con, log=print) -> int:
+    """Henter prosedyre-ID (BT-04) for TED-kunngjøringer lagret før vi tok vare på den. Ett søk, bare de to feltene."""
+    missing = {r["id"]: r["raw"] for r in con.execute("SELECT id, raw FROM contracts WHERE source='ted'")
+               if not (json.loads(r["raw"] or "{}") or {}).get("procedure_id")}
+    if not missing:
+        return 0
+    since = min(r["pub_date"] for r in con.execute("SELECT pub_date FROM contracts WHERE source='ted'"))
+    body = {"query": f"buyer-country=NOR AND notice-type IN ({CAN_TYPES}) AND publication-date>={since.replace('-', '')}",
+            "fields": ["publication-number", "procedure-identifier"], "limit": 250, "paginationMode": "ITERATION", "scope": "ALL"}
+    found: dict[str, str] = {}
+    with httpx.Client(headers={"User-Agent": "Anskaffelsesradar/2.0"}) as client:
+        while True:
+            j = _post(client, body).json()
+            for n in j.get("notices", []):
+                if n.get("publication-number") in missing and (pid := _first(n.get("procedure-identifier"))):
+                    found[n["publication-number"]] = pid
+            if not j.get("iterationNextToken") or not j.get("notices"):
+                break
+            body["iterationNextToken"] = j["iterationNextToken"]
+    with tx(con):
+        for i, pid in found.items():
+            raw = json.loads(missing[i] or "{}") or {}
+            con.execute("UPDATE contracts SET raw=? WHERE id=?", (json.dumps(raw | {"procedure_id": pid}, ensure_ascii=False), i))
+    log(f"TED: prosedyre-ID for {len(found)} av {len(missing)} eldre kunngjøringer")
+    return len(found)
+
+
+# Bare ordinære konkurranser: sosiale og særlige tjenester og plan- og designkonkurranser har ikke samme minstefrister
+CN_TYPES = "cn-standard"
+
+
+def competitions(con, since: str, log=print) -> int:
+    """Konkurransekunngjøringer (frist og prosedyre) for norske forløp, slik at fristen kan kontrolleres mot tildelingen."""
+    last = con.execute("SELECT MAX(dispatch_date) AS d FROM ted_competition").fetchone()["d"]
+    start = last or since
+    body = {"query": f"buyer-country=NOR AND notice-type IN ({CN_TYPES}) AND publication-date>={start[:10].replace('-', '')}",
+            "fields": ["publication-number", "dispatch-date", "procedure-identifier", "deadline-receipt-tender-date-lot",
+                       "deadline-receipt-request-date-lot", "procedure-type", "procedure-accelerated"],
+            "limit": 250, "paginationMode": "ITERATION", "scope": "ALL"}
+    rows = []
+    with httpx.Client(headers={"User-Agent": "Anskaffelsesradar/2.0"}) as client:
+        while True:
+            j = _post(client, body).json()
+            for n in j.get("notices", []):
+                deadlines = _list(n.get("deadline-receipt-request-date-lot")) or _list(n.get("deadline-receipt-tender-date-lot"))
+                if (pid := _first(n.get("procedure-identifier"))) and deadlines:
+                    rows.append((pid, n["publication-number"], str(_first(n.get("dispatch-date")))[:10], min(str(d)[:10] for d in deadlines),
+                                 _first(n.get("procedure-type")), int(str(_first(n.get("procedure-accelerated"))).lower() == "true")))
+            if not j.get("iterationNextToken") or not j.get("notices"):
+                break
+            body["iterationNextToken"] = j["iterationNextToken"]
+    with tx(con):
+        # Første konkurransekunngjøring i forløpet gjelder; senere rettelser kan forlenge fristen
+        con.executemany("INSERT OR IGNORE INTO ted_competition VALUES (?,?,?,?,?,?)", sorted(rows, key=lambda r: r[2]))
+    log(f"TED: {len(rows)} konkurransekunngjøringer med frist")
+    return len(rows)
 
 
 def refresh(con, data_dir: Path, since: str, log=print) -> list[dict]:
