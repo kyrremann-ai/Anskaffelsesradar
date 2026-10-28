@@ -67,3 +67,11 @@ def test_model(client):
     m = client.get("/api/model").json()
     assert len(m["metrics"]) == 3 and all(x["auc"] > 0.7 for x in m["metrics"])
     assert m["train"]["kofa"] > 0 and m["extra_flags"] and m["sources"]["KOFA"]["status"] == "demo"
+
+
+def test_klagerisiko_outside_priority(client):
+    m = client.get("/api/model").json()
+    assert m["klagerisiko"]["metrics"]["auc"] > 0.6 and m["weights"]["cri"] == 1.0
+    rows = client.get("/api/contracts", params={"limit": 50}).json()["rows"]
+    assert all(0 <= r["klagerisiko"] <= 100 for r in rows)
+    assert len({round(r["klagerisiko"]) for r in rows}) > 1

@@ -24,6 +24,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from . import klagerisiko
 from .db import get_meta, set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
@@ -133,12 +134,15 @@ class ModelBundle:
         return sorted(out, key=lambda d: -abs(d["effect"]))[:top]
 
 
-def contracts_frame(con) -> pd.DataFrame:
+def contracts_frame(con, extra: list[dict] | None = None) -> pd.DataFrame:
+    """Kontrakter med avledede felt. `extra` er rader som ikke ligger i databasen (f.eks. Doffin-treff for KOFA)."""
     df = pd.read_sql_query("SELECT * FROM contracts", con)
+    for c in ("winner_ids", "winner_names"):
+        df[c] = df[c].map(lambda s: json.loads(s or "[]"))
+    if extra:
+        df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True)
     if df.empty:
         return df
-    df["winner_ids"] = df.winner_ids.map(lambda s: json.loads(s or "[]"))
-    df["winner_names"] = df.winner_names.map(lambda s: json.loads(s or "[]"))
     df["winner"] = df.winner_ids.map(lambda w: w[0] if w else None)
     df = df.sort_values(["pub_date", "id"]).reset_index(drop=True)
     # Tidligere tildelinger for samme oppdragsgiver + leverandør (før denne kontrakten)
@@ -231,8 +235,11 @@ def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
     df["percentile"] = pct_rank(raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)
     df["tier"] = np.select([df.percentile >= 95, df.percentile >= 80], ["Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
+    # Klagerisiko (eksperimentell): persentil for sannsynlighet for KOFA-klage. Vises, men teller ikke i prioriteten.
+    km = klagerisiko.load_model()
+    df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "ml_score", "ml_lr", "ml_rf", "ml_gb", "cri", "anomaly",
+    cols = ["priority", "tier", "percentile", "ml_score", "ml_lr", "ml_rf", "ml_gb", "cri", "anomaly", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():

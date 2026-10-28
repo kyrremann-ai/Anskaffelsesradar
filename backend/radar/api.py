@@ -24,6 +24,7 @@ from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
 from .ingest import doffin, einnsyn
 from .ingest.brreg import BrregIndex
+from . import klagerisiko
 from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, model_info
 
 con = db.connect(settings.db_path)
@@ -106,7 +107,7 @@ def clean(v):
 
 def row_out(r: pd.Series, full: bool = False) -> dict:
     keys = ["id", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "method", "num_bidders", "est_value",
-            "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "ml_score", "cri", "anomaly",
+            "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "ml_score", "cri", "anomaly", "klagerisiko",
             "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
@@ -223,7 +224,7 @@ def _filter(df, q, tier, method, sector, region, flag, supplier, case_status):
     return df
 
 
-SORTABLE = {"priority", "pub_date", "num_bidders", "award_value", "award_over_estimate_pct", "cri", "ml_score"}
+SORTABLE = {"priority", "pub_date", "num_bidders", "award_value", "award_over_estimate_pct", "cri", "ml_score", "klagerisiko"}
 
 
 @app.get("/api/contracts")
@@ -375,7 +376,13 @@ def model():
     return info | {"weights": db.get_meta(con, "weights"), "flags": [{"key": k, "label": v[0], "weight": v[1]} for k, v in FLAG_LABELS.items()],
                    "extra_flags": [{"key": k, "label": v[0], "weight": v[1], "source": v[2]} for k, v in EXTRA_FLAGS.items()],
                    "sources": db.get_meta(con, "sources") or {},
-                   "n_features": len(FEATURES)}
+                   "n_features": len(FEATURES), "klagerisiko": _klagerisiko_info()}
+
+
+def _klagerisiko_info() -> dict | None:
+    m = klagerisiko.load_model()
+    return m and {"metrics": m["metrics"], "trained": m.get("trained"), "features": m["features"],
+                  "coef": dict(zip(m["features"], m["coef"]))}
 
 
 # ---------------------------------------------------------------- saker

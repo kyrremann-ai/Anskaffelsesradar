@@ -17,7 +17,7 @@ export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;
   method: string; num_bidders: number | null; est_value: number | null; award_value: number | null;
   award_over_estimate_pct: number | null; priority: number; tier: Tier; percentile: number; ml_score: number;
-  cri: number; anomaly: number; winner_names: string[]; winner_ids: string[]; flags: Flag[]; data_coverage: number;
+  cri: number; anomaly: number; klagerisiko: number | null; winner_names: string[]; winner_ids: string[]; flags: Flag[]; data_coverage: number;
   framework: number; case_status: string | null; source: string;
 };
 

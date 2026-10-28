@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
     ml_score REAL, ml_lr REAL, ml_rf REAL, ml_gb REAL,
-    cri REAL, anomaly REAL,
+    cri REAL, anomaly REAL, klagerisiko REAL,
     repeat_pair_count REAL, prev_contract REAL, winner_market_share_pct REAL,
     award_over_estimate_pct REAL, data_coverage INTEGER,
     flags TEXT                        -- JSON-liste [{key,label,weight,source}]
@@ -131,6 +131,8 @@ def connect(path: Path) -> sqlite3.Connection:
     cols = {r[1] for r in con.execute("PRAGMA table_info(brreg_roles)")}
     if "fodselsaar" not in cols:  # databaser fra før v2.1
         con.execute("ALTER TABLE brreg_roles ADD COLUMN fodselsaar INTEGER")
+    if "klagerisiko" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # fra v2.4
+        con.execute("ALTER TABLE scores ADD COLUMN klagerisiko REAL")
     cols = {r[1] for r in con.execute("PRAGMA table_info(cases)")}
     for c in ("vurdering", "vurdering_grunn"):  # revisorens vurdering, fra v2.3
         if c not in cols:

@@ -120,7 +120,9 @@ Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ik
 | Bemanningsregisteret | `BEMANNING_REGISTER_URL` | Åpent (NLOD) | leverandør på vikar/bemanning (CPV 7962) ikke godkjent |
 | Kandidatlister (valg.no) | Fil i `data/import/kandidat*.csv` | Åpent | mulig kobling til lokalpolitiker (navn + fødselsår, samme kommune) |
 | OpenSanctions | `OPENSANCTIONS_URL` | CC BY-NC: lisens kreves ved salg | sanksjonert selskap/person, PEP blant roller/eiere |
-| KOFA | Fil i `data/import/kofa*.csv` eller `.json` | Kuratert eksport | konstatert brudd. Koblede saker brukes som ekte fasit i treningen (fra 30 per klasse) |
+| KOFA | Fil i `data/import/kofa*.csv` eller `.json`, lages med `python -m radar.ingest.kofa_scrape` | Offentlige avgjørelser (åvl. § 14) | konstatert brudd. Koblede saker brukes som ekte fasit i treningen (fra 30 per klasse) |
+
+KOFA-skraperen henter fra klagenemndssekretariatet.no (www.klagenemndssekretariatet.no må være tillatt i nettverket). Den følger robots.txt, venter 3 sek mellom kall og cacher sidene i `data/cache/kofa/`. Saker uten realitetsavgjørelse (avvist, trukket) tas ikke med. `python -m radar.ingest.kofa_link` kobler sakene til Doffin-kunngjøringer (også konkurranser uten tildeling), og `python -m radar.kofa_models` sammenligner modellvalg med kryssvalidert AUC og 95 % konfidensintervall. `python -m radar.klagerisiko hent|test` måler **klagerisiko**: hvor sannsynlig det er at en konkurranse havner i KOFA (ikke korrupsjonsrisiko). Mål modellene mot KOFA-fasiten med `python -m radar.kofa_eval`: AUC for syntetisk modell testet på KOFA, modell trent bare på KOFA (CV) og begge sammen.
 
 Filimport kan også kjøres for hånd: `python -m radar.ingest.owners fil.csv --year 2024`, `python -m radar.ingest.valg fil.csv`, `python -m radar.ingest.kofa fil.csv`.
 
