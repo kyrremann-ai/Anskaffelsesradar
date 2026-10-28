@@ -1,0 +1,4 @@
+id,schema,name,aliases,birth_date,countries,addresses,identifiers,sanctions,phones,emails,program_ids,dataset,first_seen,last_seen,last_change
+Q1,Person,Per Hansen,,1965-04-02,no,,,,,,,Norwegian PEPs,2024-01-01,2025-01-01,2025-01-01
+NK-2,Company,Skinnende AS,Skinnende Norge AS,,no,,222222222,EU sanction,,,,EU FSF,2024-01-01,2025-01-01,2025-01-01
+X-3,Person,John Doe,,1970,us,,,,,,,US OFAC,2024-01-01,2025-01-01,2025-01-01

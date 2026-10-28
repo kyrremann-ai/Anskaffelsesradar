@@ -20,8 +20,10 @@ from pydantic import BaseModel
 
 from . import db, llm, pipeline
 from .config import settings
+from .enrich import FLAGS as EXTRA_FLAGS
+from .enrich import ExtraIndex
 from .ingest import doffin
-from .ingest.brreg import ROLE_CODES, BrregIndex, entity_summary
+from .ingest.brreg import BrregIndex
 from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, model_info
 
 con = db.connect(settings.db_path)
@@ -118,7 +120,8 @@ def meta():
     return {"mode": db.get_meta(con, "mode", settings.mode), "updated_at": db.get_meta(con, "updated_at"),
             "refresh": pipeline.status, "llm": "mistral" if settings.mistral_api_key else "mal",
             "doffin": bool(settings.doffin_api_key), "case_statuses": CASE_STATUSES,
-            "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()}}
+            "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
+            "sources": db.get_meta(con, "sources") or {}}
 
 
 @app.post("/api/refresh")
@@ -293,7 +296,8 @@ def _supplier_card(bi: BrregIndex, orgnr: str) -> dict:
     e = bi.ent.get(orgnr)
     roles = [dict(r) for r in con.execute(
         "SELECT rolle, rolle_navn, type, navn, person_key FROM brreg_roles WHERE orgnr=? ORDER BY rolle", (orgnr,))]
-    return {"orgnr": orgnr, "brreg": e, "roles": roles, "brreg_url": f"https://virksomhet.brreg.no/nb/oppslag/enheter/{orgnr}"}
+    return {"orgnr": orgnr, "brreg": e, "roles": roles, "brreg_url": f"https://virksomhet.brreg.no/nb/oppslag/enheter/{orgnr}",
+            **ExtraIndex(con, bi.ent).supplier(orgnr)}
 
 
 @app.get("/api/suppliers")
@@ -356,6 +360,8 @@ def doffin_latest(q: str = "", page: int = 1):
 def model():
     info = model_info(con) or pipeline.bundle().info
     return info | {"weights": db.get_meta(con, "weights"), "flags": [{"key": k, "label": v[0], "weight": v[1]} for k, v in FLAG_LABELS.items()],
+                   "extra_flags": [{"key": k, "label": v[0], "weight": v[1], "source": v[2]} for k, v in EXTRA_FLAGS.items()],
+                   "sources": db.get_meta(con, "sources") or {},
                    "n_features": len(FEATURES)}
 
 

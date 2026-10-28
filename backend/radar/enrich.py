@@ -8,6 +8,23 @@ from __future__ import annotations
 from .db import norm_name
 from .ingest.registers import CPV_PREFIX
 
+# Oversikt over flaggene herfra (nøkkel -> etikett, vekt, kilde). Vises på metodesiden.
+FLAGS = {
+    "rs_big_share": ("Kontrakten er over halve omsetningen", 1.0, "Regnskapsregisteret"),
+    "rs_neg_equity": ("Negativ egenkapital", 0.8, "Regnskapsregisteret"),
+    "rs_missing": ("Ingen årsregnskap registrert", 0.6, "Regnskapsregisteret"),
+    "own_shared_suppliers": ("Felles eier med konkurrerende leverandør", 1.2, "Aksjonærregisteret / Proff"),
+    "own_buyer_person": ("Eier har rolle hos oppdragsgiver", 2.0, "Aksjonærregisteret + Brreg"),
+    "own_buyer_owns": ("Oppdragsgiver eier leverandøren", 0.3, "Aksjonærregisteret"),
+    "pol_link": ("Mulig kobling til lokalpolitiker", 1.5, "Kandidatlister (0,8 hvis ikke valgt)"),
+    "sanc_org": ("Leverandør på sanksjons-/risikoliste", 2.0, "OpenSanctions (0,8 uten sanksjon)"),
+    "sanc_person": ("Rolleinnehaver/eier sanksjonert", 2.0, "OpenSanctions"),
+    "pep_person": ("Rolleinnehaver/eier er PEP", 0.8, "OpenSanctions"),
+    "reg_renhold": ("Ikke godkjent i renholdsregisteret", 1.2, "Arbeidstilsynet"),
+    "reg_bemanning": ("Ikke godkjent i bemanningsregisteret", 1.2, "Arbeidstilsynet"),
+    "kofa_brudd": ("KOFA har konstatert brudd", 1.0, "KOFA (1,5 ved ulovlig direkte anskaffelse)"),
+}
+
 # Godkjent-status i Arbeidstilsynets registre
 _OK = ("godkjent",)
 
@@ -58,7 +75,7 @@ class ExtraIndex:
     def _persons(self, orgnr: str) -> set[tuple]:
         """Rolleinnehavere og personlige eiere for en virksomhet."""
         p = set(self.role_people.get(orgnr, set()))
-        for k, o in self.owners.get(orgnr, {}).items():
+        for o in self.owners.get(orgnr, {}).values():
             if not o["owner_orgnr"] and o["owner_birth_year"]:
                 p.add((norm_name(o["owner_name"]), o["owner_birth_year"]))
         return p

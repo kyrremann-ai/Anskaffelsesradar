@@ -12,7 +12,11 @@ import json
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import HistGradientBoostingClassifier, IsolationForest, RandomForestClassifier
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier,
+    IsolationForest,
+    RandomForestClassifier,
+)
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import recall_score, roc_auc_score, roc_curve

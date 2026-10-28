@@ -88,6 +88,9 @@ function Supplier({ s }: { s: SupplierCard }) {
           <Row k="MVA-registrert" v={b.mva == null ? "–" : b.mva ? "Ja" : <span className="text-hi">Nei</span>} />
           <Row k="Bransje (NACE)" v={b.nace ? `${b.nace} ${b.nace_tekst ?? ""}` : "–"} />
           <Row k="Adresse" v={b.adresse || "–"} />
+          {s.regnskap?.driftsinntekter != null && <Row k={`Omsetning ${s.regnskap.aar ?? ""}`} v={nok(s.regnskap.driftsinntekter)} />}
+          {s.regnskap?.egenkapital != null && <Row k="Egenkapital" v={<span className={cx(s.regnskap.egenkapital < 0 && "text-hi")}>{nok(s.regnskap.egenkapital)}</span>} />}
+          {s.owners.length > 0 && <Row k="Største eier" v={`${s.owners[0].name}${s.owners[0].share_pct != null ? ` (${s.owners[0].share_pct.toLocaleString("nb-NO")} %)` : ""}`} />}
         </dl>
       )}
       {s.roles.length > 0 && (

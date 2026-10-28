@@ -71,16 +71,36 @@ En CX22 (2 vCPU, 4 GB) holder. Sett `REFRESH_HOURS=24` for daglig oppdatering.
 | GET | `/api/contracts/{id}` | saksmappe: flagg, drivere, leverandør (Brreg), sak, AI |
 | POST | `/api/contracts/{id}/assess` | ny AI-vurdering (lagres) |
 | GET | `/api/contracts/export.csv` | CSV (semikolon, norsk desimal) |
-| GET | `/api/suppliers`, `/api/suppliers/{orgnr}` | leverandører, roller, koblinger |
+| GET | `/api/suppliers`, `/api/suppliers/{orgnr}` | leverandører, roller, koblinger, regnskap, eiere, registre |
 | GET/POST/PATCH/DELETE | `/api/cases…` | saker med logg |
 | GET | `/api/cases/{id}/arbeidspapir` | utskriftsvennlig arbeidspapir |
 | GET | `/api/doffin/latest?q=` | Doffin live |
 | GET | `/api/model` | modellytelse, viktigste felt, vekter |
 | POST | `/api/refresh` | start innhenting og scoring |
 
+## Tilleggskilder
+
+Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ikke de andre, og status vises på metodesiden. Flaggene gir et tillegg i prioriteten (se `radar/enrich.py`).
+
+| Kilde | Hvordan | Tilgang | Flagg |
+|---|---|---|---|
+| Regnskapsregisteret | API per orgnr (`REGNSKAP=1`) | Åpent | kontrakt > 50 % av omsetning, negativ egenkapital, AS uten regnskap |
+| Aksjonærregisteret (Skatteetaten) | Fil i `data/import/aksjonaer<år>.csv` | Fil fra Skatteetaten eller aksjeeiere.no | felles eier med konkurrent, eier har rolle hos oppdragsgiver |
+| Proff API | `PROFF_API_KEY` | Betalt avtale med Proff. Vi skraper ikke proff.no | eiere, som over |
+| Renholdsregisteret | `RENHOLD_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på renhold (CPV 9091) ikke godkjent |
+| Bemanningsregisteret | `BEMANNING_REGISTER_URL` | Åpent (NLOD) | leverandør på vikar/bemanning (CPV 7962) ikke godkjent |
+| Kandidatlister (valg.no) | Fil i `data/import/kandidat*.csv` | Åpent | mulig kobling til lokalpolitiker (navn + fødselsår, samme kommune) |
+| OpenSanctions | `OPENSANCTIONS_URL` | CC BY-NC: lisens kreves ved salg | sanksjonert selskap/person, PEP blant roller/eiere |
+| KOFA | Fil i `data/import/kofa*.csv` eller `.json` | Kuratert eksport | konstatert brudd. Koblede saker brukes som ekte fasit i treningen (fra 30 per klasse) |
+
+Filimport kan også kjøres for hånd: `python -m radar.ingest.owners fil.csv --year 2024`, `python -m radar.ingest.valg fil.csv`, `python -m radar.ingest.kofa fil.csv`.
+
+Personvern: kandidatlister, PEP og personlige eiere er personopplysninger. Treff vises som «mulig kobling» og må verifiseres. Gjør en DPIA før produksjon, og send aldri slike data til en LLM.
+
 ## Kjente begrensninger
 
 - Treningsdata er syntetiske (rapportens generator). `amendment_count` og `subcontractor_pct` er tatt ut av modellen fordi TED ikke har dem.
 - Rammeavtaler oppgir ofte maksverdi. Overskridelsesflagget får derfor halv vekt på rammeavtaler.
-- Reelle rettighetshavere og Aksjonærregisteret er ikke åpne. Eierskap dekkes foreløpig bare via roller.
+- Reelle rettighetshavere er ikke åpent. Eierskap dekkes av Aksjonærregisteret (årlig fil, ett år gammel) og eventuelt Proff API.
+- Adapterne for Regnskapsregisteret, Arbeidstilsynet, OpenSanctions og Proff er testet mot fixtures, ikke mot live-tjenestene. Proff-feltnavn må bekreftes mot deres dokumentasjon når avtalen er på plass.
 - Matching av personer på tvers av virksomheter bruker navn og fødselsdato (hashet med salt).

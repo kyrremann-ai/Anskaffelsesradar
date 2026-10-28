@@ -51,7 +51,7 @@ def test_suppliers_and_export(client):
     s = client.get("/api/suppliers").json()
     assert s["total"] == 140 and any(r["brreg_flags"] for r in s["rows"])
     d = client.get(f"/api/suppliers/{s['rows'][0]['orgnr']}").json()
-    assert d["contracts"] and "links" in d
+    assert d["contracts"] and "links" in d and {"regnskap", "owners", "registers", "sanctions"} <= d.keys()
     csv = client.get("/api/contracts/export.csv").text
     assert csv.startswith("﻿id;") and len(csv.splitlines()) == 1801
 
@@ -59,3 +59,4 @@ def test_suppliers_and_export(client):
 def test_model(client):
     m = client.get("/api/model").json()
     assert len(m["metrics"]) == 3 and all(x["auc"] > 0.7 for x in m["metrics"])
+    assert m["train"]["kofa"] > 0 and m["extra_flags"] and m["sources"]["KOFA"]["status"] == "demo"

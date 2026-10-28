@@ -42,7 +42,8 @@ def parse(text: str) -> list[dict]:
     for r in rows[1:]:
         if not r:
             continue
-        g = lambda i: r[i].strip() if i is not None and i < len(r) else ""  # noqa: E731
+        def g(i, r=r):
+            return r[i].strip() if i is not None and i < len(r) else ""
         navn = f"{g(i_for)} {g(i_etter)}".strip() if i_for is not None and i_etter is not None else g(i_navn)
         aar = re.sub(r"\D", "", g(i_aar))[:4]
         if not navn or len(aar) != 4:
