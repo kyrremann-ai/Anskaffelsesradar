@@ -17,7 +17,7 @@ export default function Doffin() {
   const hits = (data?.hits ?? []).filter((h) => !only || h.flags.length);
   return (
     <div>
-      <PageHead title="Doffin live" desc="De nyeste kunngjøringene fra Doffin, hentet direkte. Tidlige varselsignaler før kontrakten tildeles, også under EØS-terskel."
+      <PageHead title="Doffin live" desc="De nyeste kunngjøringene fra Doffin, hentet direkte. Flaggene vises før kontrakten tildeles, også under EØS-terskel."
         right={<Button variant="outline" onClick={() => refetch()} disabled={isFetching || !meta?.doffin}>↻ Oppdater</Button>} />
       {meta && !meta.doffin ? (
         <Empty>Doffin-nøkkel mangler. Hent en gratis nøkkel i DFØs API-portal og sett <code>DOFFIN_API_KEY</code> i <code>.env</code>.</Empty>
@@ -25,7 +25,7 @@ export default function Doffin() {
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Search value={q} onChange={setQ} placeholder="Søk i Doffin, f.eks. «IT-drift»" />
-            <button onClick={() => setOnly(!only)} className={cx("rounded-md px-3 py-2 text-xs", only ? "bg-accent text-surface" : "bg-sunk text-muted")}>Kun med varselsignal</button>
+            <button onClick={() => setOnly(!only)} aria-pressed={only} className={cx("rounded-md px-3 py-2 text-xs", only ? "bg-accent text-surface" : "bg-sunk text-muted")}>Bare med flagg</button>
             {data && <span className="ml-auto text-xs text-muted">{int(data.total)} kunngjøringer i Doffin</span>}
           </div>
           {isLoading ? <Skeleton className="h-96" /> : isError ? <Empty>{String(error?.message)}</Empty> : !hits.length ? <Empty>Ingen treff.</Empty> : (

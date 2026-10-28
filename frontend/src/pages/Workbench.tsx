@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CaseFile } from "../components/CaseFile";
-import { Button, CheckBadge, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
+import { Button, CheckBadge, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
 import { STATIC, qs, useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { date } from "../lib/format";
 import { exportCsv, exportLabels } from "../lib/static";
@@ -31,6 +31,10 @@ export default function Workbench() {
   const { data: meta } = useApi<Meta>("/api/meta");
   const { data: sum } = useApi<Summary>("/api/summary", { buyers });
   const sel = get("id") || (typeof window !== "undefined" && window.innerWidth >= 1024 ? data?.rows[0]?.id : "") || "";
+  // Smal skjerm: saksmappen erstatter listen og filtrene, så start øverst i den
+  useEffect(() => {
+    if (get("id") && window.innerWidth < 1024) window.scrollTo(0, 0);
+  }, [get("id")]); // eslint-disable-line
   const flagItems = [
     ...(sum?.regler ?? []).map((x) => ({ v: `regel:${x.key}`, l: `◆ ${x.label} (${x.n})` })),
     ...(sum?.n_intents ? [{ v: "type:intensjon", l: `Intensjonskunngjøringer (${sum.n_intents})` }] : []),
@@ -54,7 +58,7 @@ export default function Workbench() {
               title="Revisorenes vurderinger (relevant / ikke relevant) som fasit for modellene" href="/api/labels.csv">Revisorvurderinger</a>
           </div>} />
       {exportError && <p className="-mt-2 mb-3 text-sm text-hi">{exportError}</p>}
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <div className={cx("mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap", get("id") && "max-lg:hidden")}>
         <Search value={q} onChange={setQ} placeholder="Søk tittel, oppdragsgiver, leverandør" />
         <Select label="Rangering" value={get("rank")} onChange={(v) => set("rank", v)} placeholder="Nasjonal rangering"
           items={[{ v: "gruppe", l: "Innen sammenligningsgruppe" }]} />
@@ -81,9 +85,9 @@ export default function Workbench() {
                   <li key={r.id}>
                     <button onClick={() => set("id", r.id)} aria-current={r.id === sel}
                       className={cx("grid w-full grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-3 text-left hover:bg-sunk", r.id === sel && "bg-accent-soft shadow-[inset_3px_0_0_var(--accent)]")}>
-                      <span className="num text-lg font-bold" style={{ color: scoreColor(r.priority) }}>{Math.round(r.priority)}</span>
+                      <span className="num text-lg font-bold" style={{ color: tierColor(get("rank") === "gruppe" ? r.peer_tier : r.tier) }}>{Math.round(r.priority)}</span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{r.title}</span>
+                        <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">{r.title}</span>
                         <span className="block truncate text-xs text-muted">{r.buyer} · {date(r.pub_date)}</span>
                         <span className="mt-1 flex flex-wrap items-center gap-1">
                           <TierBadge tier={get("rank") === "gruppe" ? r.peer_tier : r.tier} />
@@ -108,7 +112,7 @@ export default function Workbench() {
         <section className={cx("min-w-0 rounded-md border border-line bg-surface", !sel && "hidden lg:block")}>
           {sel ? (
             <>
-              <button className="px-5 pt-4 text-sm text-accent lg:hidden" onClick={() => set("id", "")}>← Tilbake til listen</button>
+              <button className="mx-3 mt-3 rounded-md px-2 py-1.5 text-sm text-accent hover:bg-sunk lg:hidden" onClick={() => set("id", "")}>← Tilbake til listen</button>
               <CaseFile key={sel} id={sel} onOpen={(id) => set("id", id)} />
             </>
           ) : <Empty>Velg en kontrakt i listen.</Empty>}

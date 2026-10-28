@@ -4,25 +4,27 @@
 
 /* Farger fra Spor-skissen. Ingen eksterne fonter (personvern i offentlig sektor). */
 :root {
-  --bg: #eef2f4; --surface: #ffffff; --sunk: #f6f8f9; --fg: #14212a; --muted: #5a6872; --line: #d5dde2;
+  --bg: #eef2f4; --surface: #ffffff; --sunk: #f6f8f9; --fg: #14212a; --muted: #5a6872; --line: #d5dde2; --field: #7d8c97;
   --accent: #1d5e7a; --accent-soft: #e2eef3; --ink: #0f2c3b; --ink-fg: #e8f1f5;
-  --hi: #b0362c; --hi-soft: #f8e3e0; --mid: #986508; --mid-soft: #f6ebd4; --lo: #2f6b45; --lo-soft: #e0efe5;
+  --hi: #b0362c; --hi-soft: #f8e3e0; --mid: #875a05; --mid-soft: #f6ebd4; --lo: #2f6b45; --lo-soft: #e0efe5;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842;
+    --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842; --field: #617784;
     --accent: #6fb3d1; --accent-soft: #1a303b; --ink: #08222f; --ink-fg: #d8e8ef;
     --hi: #f08a7f; --hi-soft: #3b1f1c; --mid: #e3b55c; --mid-soft: #382d16; --lo: #7cc597; --lo-soft: #183022;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842;
+  --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842; --field: #617784;
   --accent: #6fb3d1; --accent-soft: #1a303b; --ink: #08222f; --ink-fg: #d8e8ef;
   --hi: #f08a7f; --hi-soft: #3b1f1c; --mid: #e3b55c; --mid-soft: #382d16; --lo: #7cc597; --lo-soft: #183022;
   color-scheme: dark;
 }
 body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; }
 .num { font-variant-numeric: tabular-nums; }
+/* Skjemafelt trenger synlig kant (minst 3:1), de dekorative skillelinjene gjør ikke det */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { border-color: var(--field) !important; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

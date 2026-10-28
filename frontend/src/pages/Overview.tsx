@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Card, Empty, Kpi, Meter, PageHead, Skeleton, TierBadge, scoreColor } from "../components/ui";
+import { Card, Empty, Kpi, Meter, PageHead, Skeleton, TierBadge, tierColor } from "../components/ui";
 import { useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { MONTHS, date, int, nok, pct } from "../lib/format";
 import { useScope } from "../lib/scope";
@@ -35,15 +35,15 @@ export default function Overview() {
         <Kpi to="/arbeid" label="Kontrakter" value={int(s.n)} sub={sources} />
         <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt (rangering, ikke sannsynlighet)" />
         <Kpi to="/arbeid?tier=Forhøyet" label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
-        <Kpi to="/arbeid?flag=single_bid" label="Kun ett tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med tilbudstall" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
-        <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Uten konkurranse" compare={vs(s.direct_pct, s.national?.direct_pct)} />
-        <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub={`Tildelt verdi ${nok(s.total_value)}`} />
+        <Kpi to="/arbeid?flag=single_bid" label="Ett registrert tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med oppgitt antall tilbud" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
+        <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Andel av kontraktene" compare={vs(s.direct_pct, s.national?.direct_pct)} />
+        <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub="Saker som ikke er avsluttet" />
       </div>
       <p className="mt-2 text-xs text-muted">
         {o && !sel.length && <>Én kontrakt = én kunngjort tildeling. {int(o.kunngjøringer)} kunngjøringer fra TED og Doffin gir {int(o.kontrakter)} kontrakter
           i {int(o.forløp)} anskaffelsesforløp: {int(Object.values(o.duplikater).reduce((a, b) => a + b, 0))} duplikater er slått sammen, og{" "}
           {int(o.per_type.intensjon ?? 0)} intensjonskunngjøringer telles for seg. </>}
-        Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi. <Link to="/metode" className="underline">Metode</Link>
+        Samlet tildelt verdi: {nok(s.total_value)}. Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi. <Link to="/metode" className="underline">Metode</Link>
       </p>
       {s.regler.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -55,13 +55,13 @@ export default function Overview() {
         <Card title="Kontrakter per måned" desc="Flagget = høy eller forhøyet prioritet">
           <div className="h-64">
             <ResponsiveContainer>
-              <ComposedChart data={monthly} margin={{ left: -18, right: 4, top: 4 }}>
+              <ComposedChart data={monthly} margin={{ left: -18, right: 16, top: 4 }}>
                 <CartesianGrid vertical={false} stroke="var(--line)" />
-                <XAxis dataKey="label" tick={tick} tickLine={false} axisLine={false} interval={2} />
+                <XAxis dataKey="label" tick={tick} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={18} />
                 <YAxis tick={tick} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="n" name="Alle tildelinger" fill="var(--accent)" fillOpacity={0.25} radius={[3, 3, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => <span style={{ color: "var(--fg)" }}>{v}</span>} />
+                <Bar dataKey="n" name="Alle tildelinger" fill="color-mix(in srgb, var(--accent) 30%, var(--surface))" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="flagged" name="Flagget" fill="var(--mid)" radius={[3, 3, 0, 0]} />
                 <Line dataKey="direct" name="Direkte tildelinger" stroke="var(--hi)" strokeWidth={2} dot={false} />
               </ComposedChart>
@@ -83,15 +83,15 @@ export default function Overview() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <Card title="Høyest prioritert uten sak" right={<Link to="/arbeid?sak=uten" className="text-xs text-accent hover:underline">Alle</Link>}>
+        <Card title="Høyest prioritert uten sak" right={<Link to="/arbeid?sak=uten" className="-my-1 rounded px-2 py-1 text-xs text-accent hover:underline">Se alle</Link>}>
           {top ? (
             <ul className="-my-2 divide-y divide-line">
               {top.rows.map((r) => (
                 <li key={r.id}>
                   <Link to={`/arbeid?id=${encodeURIComponent(r.id)}`} className="-mx-2 flex items-center gap-4 rounded px-2 py-2.5 hover:bg-sunk">
-                    <span className="num w-9 shrink-0 text-right text-base font-bold" style={{ color: scoreColor(r.priority) }}>{Math.round(r.priority)}</span>
+                    <span className="num w-9 shrink-0 text-right text-base font-bold" style={{ color: tierColor(r.tier) }}>{Math.round(r.priority)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{r.title}</span>
+                      <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">{r.title}</span>
                       <span className="block truncate text-xs text-muted">{r.buyer} · {r.flags.map((f) => f.label).slice(0, 3).join(" · ")}</span>
                     </span>
                     <TierBadge tier={r.tier} />

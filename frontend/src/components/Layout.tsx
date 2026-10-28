@@ -87,9 +87,11 @@ function RefreshButton({ meta }: { meta?: Meta }) {
 }
 
 function ThemeToggle() {
-  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
+  // Uten eget valg følger appen systemet, så ikonet må starte fra det
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark"
+    || (!document.documentElement.dataset.theme && window.matchMedia?.("(prefers-color-scheme: dark)").matches));
   return (
-    <button className="rounded p-1.5 text-muted hover:bg-sunk" aria-label="Bytt lys/mørk modus"
+    <button className="grid h-9 w-9 place-items-center rounded-md text-base text-muted hover:bg-sunk hover:text-fg" aria-label={dark ? "Bytt til lys modus" : "Bytt til mørk modus"}
       onClick={() => { const d = !dark; setDark(d); document.documentElement.dataset.theme = d ? "dark" : "light"; }}>
       {dark ? "☀" : "☾"}
     </button>
@@ -99,6 +101,12 @@ function ThemeToggle() {
 export function Layout({ children }: { children: ReactNode }) {
   const { data: meta } = useApi<Meta>("/api/meta", {}, { refetchInterval: STATIC ? false : 4000 });
   const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    if (!menu) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [menu]);
   return (
     <div className="flex min-h-screen">
       <aside className={cx("fixed inset-y-0 left-0 z-40 w-60 flex-col bg-ink text-ink-fg md:flex", menu ? "flex" : "hidden")}>
@@ -124,12 +132,12 @@ export function Layout({ children }: { children: ReactNode }) {
       {menu && <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={() => setMenu(false)} />}
       <div className="flex min-w-0 flex-1 flex-col md:pl-60">
         <header className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur md:px-8">
-          <button className="rounded p-1.5 md:hidden" onClick={() => setMenu(true)} aria-label="Meny">☰</button>
+          <button className="grid h-9 w-9 place-items-center rounded-md hover:bg-sunk md:hidden" onClick={() => setMenu(true)} aria-label="Åpne meny" aria-expanded={menu}>☰</button>
           <ScopePicker />
           {meta?.mode === "demo" && (
             <span className="rounded bg-mid-soft px-2 py-0.5 font-mono text-xs text-mid" title="Fiktive oppdragsgivere og leverandører">DEMODATA</span>
           )}
-          <span className="rounded bg-accent-soft px-2 py-0.5 text-xs text-accent" title="Se Modell og metode">
+          <span className="hidden rounded bg-accent-soft px-2 py-0.5 text-xs text-accent sm:inline" title="Se Modell og metode">
             Pilot: regelbaserte flagg
           </span>
           <div className="ml-auto flex items-center gap-2">

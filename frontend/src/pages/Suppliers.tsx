@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, Empty, PageHead, Search, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
+import { Card, Empty, PageHead, Search, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
 import { useApi, type ContractRow, type SupplierCard } from "../lib/api";
 import { date, int, nok } from "../lib/format";
 import { useScope } from "../lib/scope";
@@ -21,16 +21,16 @@ export function Suppliers() {
         desc="Alle leverandører med tildelinger i dine enheter, beriket med Enhetsregisteret og roller fra Brønnøysundregistrene. Sortert etter antall Brreg-flagg." />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Search value={q} onChange={setQ} placeholder="Søk navn eller orgnr" />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />Bare med Brreg-flagg</label>
+        <label className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />Bare med Brreg-flagg</label>
         {data && <span className="text-xs text-muted">{int(data.total)} leverandører</span>}
       </div>
       {!data ? <Skeleton className="h-96" /> : !data.rows.length ? <Empty>Ingen treff.</Empty> : (
         <div className="overflow-x-auto rounded-md border border-line bg-surface">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full text-sm sm:min-w-[820px]">
             <thead className="bg-sunk text-left text-xs text-muted">
-              <tr><th className="min-w-[200px] px-3 py-2.5 font-medium">Leverandør</th><th className="px-3 font-medium">Brreg-flagg</th>
-                <th className="px-3 text-right font-medium">Kontrakter</th><th className="px-3 text-right font-medium">Oppdragsgivere</th>
-                <th className="px-3 text-right font-medium">Verdi</th><th className="px-3 text-right font-medium">Snittprioritet</th></tr>
+              <tr><th className="px-3 py-2.5 font-medium sm:min-w-[200px]">Leverandør</th><th className="hidden px-3 font-medium sm:table-cell">Brreg-flagg</th>
+                <th className="hidden px-3 text-right font-medium sm:table-cell">Kontrakter</th><th className="hidden px-3 text-right font-medium sm:table-cell">Oppdragsgivere</th>
+                <th className="hidden px-3 text-right font-medium sm:table-cell">Verdi</th><th className="px-3 text-right font-medium" title="Snitt av prioriteten (0–100) for leverandørens kontrakter">Snitt&shy;prioritet</th></tr>
             </thead>
             <tbody>
               {data.rows.map((s) => (
@@ -38,14 +38,16 @@ export function Suppliers() {
                   <td className="px-3 py-2">
                     <Link to={`/leverandorer/${s.orgnr}`} className="font-medium hover:underline">{s.name}</Link>
                     <div className="font-mono text-xs text-muted">{s.orgnr}{s.stiftet ? ` · stiftet ${s.stiftet.slice(0, 4)}` : ""}{s.in_brreg ? "" : " · ikke hentet fra Brreg"}</div>
+                    <div className="num mt-1 text-xs text-muted sm:hidden">{int(s.n)} kontrakter · {int(s.n_buyers)} oppdragsgivere · {nok(s.total_value)}</div>
+                    {s.brreg_flags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1 sm:hidden">{s.brreg_flags.map((f) => <span key={f} className="rounded bg-mid-soft px-1.5 py-0.5 text-xs text-mid">{f}</span>)}</div>}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="hidden px-3 py-2 sm:table-cell">
                     <div className="flex flex-wrap gap-1">{s.brreg_flags.map((f) => <span key={f} className="rounded bg-mid-soft px-1.5 py-0.5 text-xs text-mid">{f}</span>)}</div>
                   </td>
-                  <td className="num px-3 text-right">{int(s.n)}</td>
-                  <td className="num px-3 text-right">{int(s.n_buyers)}</td>
-                  <td className="num whitespace-nowrap px-3 text-right">{nok(s.total_value)}</td>
-                  <td className="num px-3 text-right font-semibold" style={{ color: scoreColor(s.avg_priority) }}>{Math.round(s.avg_priority)}</td>
+                  <td className="num hidden px-3 text-right sm:table-cell">{int(s.n)}</td>
+                  <td className="num hidden px-3 text-right sm:table-cell">{int(s.n_buyers)}</td>
+                  <td className="num hidden whitespace-nowrap px-3 text-right sm:table-cell">{nok(s.total_value)}</td>
+                  <td className="num px-3 text-right font-semibold">{Math.round(s.avg_priority)}</td>
                 </tr>
               ))}
             </tbody>
@@ -78,7 +80,8 @@ export function SupplierPage() {
               {[["Status", b.kind === "slettet" ? `Slettet ${b.slettedato ?? ""}` : b.konkurs ? "Konkurs" : b.under_avvikling ? "Under avvikling" : "Aktiv"],
                 ["Selskapsform", b.orgform], ["Stiftet", date(b.stiftet)], ["Ansatte", int(b.ansatte)],
                 ["MVA-registrert", b.mva == null ? "–" : b.mva ? "Ja" : "Nei"], ["NACE", `${b.nace ?? "–"} ${b.nace_tekst ?? ""}`], ["Adresse", b.adresse || "–"]]
-                .map(([k, v]) => <div key={k} className="flex justify-between gap-3"><dt className="text-muted">{k}</dt><dd className="text-right">{v}</dd></div>)}
+                .map(([k, v]) => <div key={k} className="flex justify-between gap-3"><dt className="text-muted">{k}</dt>
+                  <dd className={cx("text-right", k === "Status" && v !== "Aktiv" && "font-medium text-hi")}>{v}</dd></div>)}
             </dl>
           )}
         </Card>
@@ -97,7 +100,7 @@ export function SupplierPage() {
             </dl>
           )}
         </Card>
-        <Card title="Eiere" desc="Aksjonærregisteret (Skatteetaten) eller Proff">
+        <Card title="Eiere" desc="Aksjonærregisteret (Skatteetaten)">
           {!d.owners.length ? <p className="text-sm text-muted">Ingen eierdata importert.</p> : (
             <ul className="space-y-1 text-sm">{d.owners.map((o, i) => (
               <li key={i} className="flex justify-between gap-3">
@@ -133,8 +136,8 @@ export function SupplierPage() {
           {d.contracts.map((r) => (
             <li key={r.id}>
               <Link to={`/arbeid?supplier=${orgnr}&id=${encodeURIComponent(r.id)}`} className="-mx-2 flex items-center gap-4 rounded px-2 py-2.5 hover:bg-sunk">
-                <span className="num w-9 shrink-0 text-right font-bold" style={{ color: scoreColor(r.priority) }}>{Math.round(r.priority)}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{r.title}</span>
+                <span className="num w-9 shrink-0 text-right font-bold" style={{ color: tierColor(r.tier) }}>{Math.round(r.priority)}</span>
+                <span className="min-w-0 flex-1"><span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">{r.title}</span>
                   <span className="block truncate text-xs text-muted">{r.buyer} · {date(r.pub_date)} · {nok(r.award_value)}</span></span>
                 <TierBadge tier={r.tier} />
               </Link>

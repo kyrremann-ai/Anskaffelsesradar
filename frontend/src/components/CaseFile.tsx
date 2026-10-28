@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, nok, pct, signedPct } from "../lib/format";
-import { Button, Meter, Skeleton, TierBadge, cx, scoreColor } from "./ui";
+import { Button, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
 
 function Md({ text }: { text: string }) {
   return (
@@ -251,10 +251,10 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         </section>)}
 
       <section className="grid grid-cols-[auto_1fr] items-center gap-4 rounded-md border border-line p-4">
-        <div className="num text-4xl font-bold" style={{ color: scoreColor(d.priority) }}>{Math.round(d.priority)}</div>
+        <div className="num text-4xl font-bold" style={{ color: tierColor(d.tier) }}>{Math.round(d.priority)}</div>
         <div>
           <div className="text-sm font-medium">Prioritet</div>
-          <Meter value={d.priority} className="my-1.5" />
+          <Meter value={d.priority} color={tierColor(d.tier)} className="my-1.5" />
           <p className="text-xs text-muted">{d.tier === "Intensjon"
             ? "Intensjonskunngjøringer er ikke kontrakter og rangeres ikke. Poengsummen viser bare hvilke observasjoner som slår ut."
             : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt
