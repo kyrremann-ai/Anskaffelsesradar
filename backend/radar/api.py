@@ -25,7 +25,7 @@ from .enrich import ExtraIndex
 from .ingest import doffin, einnsyn
 from .ingest.brreg import BrregIndex
 from . import klagerisiko
-from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, model_info
+from .scoring import FLAG_LABELS, contracts_frame
 
 con = db.connect(settings.db_path)
 CASE_STATUSES = ["Ny", "Under vurdering", "Fulgt opp", "Avsluttet – ingen funn", "Avsluttet – funn"]
@@ -107,11 +107,11 @@ def clean(v):
 
 def row_out(r: pd.Series, full: bool = False) -> dict:
     keys = ["id", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "method", "num_bidders", "est_value",
-            "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "ml_score", "cri", "anomaly", "klagerisiko",
+            "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "cri", "klagerisiko",
             "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
-                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "ml_lr", "ml_rf", "ml_gb", "case_id"]
+                 "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id"]
     return {k: clean(r.get(k)) for k in keys}
 
 
@@ -224,7 +224,7 @@ def _filter(df, q, tier, method, sector, region, flag, supplier, case_status):
     return df
 
 
-SORTABLE = {"priority", "pub_date", "num_bidders", "award_value", "award_over_estimate_pct", "cri", "ml_score", "klagerisiko"}
+SORTABLE = {"priority", "pub_date", "num_bidders", "award_value", "award_over_estimate_pct", "cri", "klagerisiko"}
 
 
 @app.get("/api/contracts")
@@ -248,7 +248,7 @@ def export(buyers: str | None = None, q: str = "", tier: str = "", method: str =
     out = df.assign(flagg=df["flags"].map(lambda fl: "; ".join(f["label"] for f in fl)),
                     leverandor=df.winner_names.map("; ".join))
     cols = ["id", "pub_date", "title", "buyer", "leverandor", "method", "num_bidders", "est_value", "award_value",
-            "award_over_estimate_pct", "priority", "tier", "ml_score", "cri", "anomaly", "flagg", "case_status", "url"]
+            "award_over_estimate_pct", "priority", "tier", "cri", "klagerisiko", "flagg", "case_status", "url"]
     buf = io.StringIO()
     out.sort_values("priority", ascending=False)[cols].to_csv(buf, index=False, sep=";", decimal=",")
     return StreamingResponse(iter(["﻿" + buf.getvalue()]), media_type="text/csv",
@@ -276,8 +276,6 @@ def contract_detail(cid: str):
     df = frame()
     r = _contract(cid)
     out = row_out(r, full=True)
-    x = feature_frame(pd.DataFrame([r])).iloc[0]
-    out["drivers"] = pipeline.bundle().drivers(x)
     same = df[(df.buyer_id == r.buyer_id) & (df.winner == r.winner) & (df.id != cid)].sort_values("pub_date", ascending=False)
     out["sameSupplier"] = [{"id": s.id, "title": s.title, "pub_date": s.pub_date, "tier": s.tier} for s in same.head(10).itertuples()]
     bi = brreg_index()
@@ -372,11 +370,10 @@ def doffin_latest(q: str = "", page: int = 1):
 
 @app.get("/api/model")
 def model():
-    info = model_info(con) or pipeline.bundle().info
-    return info | {"weights": db.get_meta(con, "weights"), "flags": [{"key": k, "label": v[0], "weight": v[1]} for k, v in FLAG_LABELS.items()],
+    return {"weights": db.get_meta(con, "weights"), "flags": [{"key": k, "label": v[0], "weight": v[1]} for k, v in FLAG_LABELS.items()],
                    "extra_flags": [{"key": k, "label": v[0], "weight": v[1], "source": v[2]} for k, v in EXTRA_FLAGS.items()],
                    "sources": db.get_meta(con, "sources") or {},
-                   "n_features": len(FEATURES), "klagerisiko": _klagerisiko_info()}
+                   "klagerisiko": _klagerisiko_info()}
 
 
 def _klagerisiko_info() -> dict | None:
@@ -472,7 +469,7 @@ def labels_csv():
                      "vurdering": c["vurdering"], "relevant": int(c["vurdering"] == "Relevant"), "begrunnelse": c["vurdering_grunn"],
                      "vurdert_av": ev["actor"] if ev else "", "vurdert": ev["at"] if ev else "", "status": c["status"],
                      "prioritet": clean(r.priority) if r is not None else None, "cri": clean(r.cri) if r is not None else None,
-                     "ml_score": clean(r.ml_score) if r is not None else None,
+                     "klagerisiko": clean(r.klagerisiko) if r is not None else None,
                      "flagg": ", ".join(f["label"] for f in r["flags"]) if r is not None else ""})
     buf = io.StringIO()
     pd.DataFrame(rows, columns=LABEL_COLS).to_csv(buf, index=False, sep=";", decimal=",")
@@ -481,7 +478,7 @@ def labels_csv():
 
 
 LABEL_COLS = ["kontrakt_id", "tittel", "oppdragsgiver", "vurdering", "relevant", "begrunnelse", "vurdert_av", "vurdert",
-              "status", "prioritet", "cri", "ml_score", "flagg"]
+              "status", "prioritet", "cri", "klagerisiko", "flagg"]
 
 
 @app.get("/api/cases/{case_id}/arbeidspapir", response_class=HTMLResponse)
@@ -497,8 +494,6 @@ def workpaper(case_id: int):
     events = "".join(f"<tr><td>{e(v['at'])}</td><td>{e(v['actor'] or '')}</td><td>{e(v['field'])}</td><td>{e(str(v['old'] or ''))}</td><td>{e(str(v['new'] or ''))}</td></tr>" for v in d["case"]["events"])
     ai = "".join(f"<h3>AI-vurdering {e(a['at'])} ({e(a['provider'])}/{e(a['model'])})</h3><pre>{e(a['text'])}</pre>" for a in d["assessments"])
     sup = "".join(f"<li>{e((s['brreg'] or {}).get('navn') or s['orgnr'])} – orgnr {e(s['orgnr'])}, stiftet {e(str((s['brreg'] or {}).get('stiftet') or '–'))}</li>" for s in d["suppliers"])
-    ml = (f", ML {fmt(d['ml_score'])}, avvik {fmt(d['anomaly'])}" if (db.get_meta(con, "weights") or {}).get("mode") == "ml"
-          else f". ML-score {fmt(d['ml_score'])} er under utvikling og teller ikke")
     body = f"""<!doctype html><html lang="nb"><meta charset="utf-8"><title>Arbeidspapir sak {case_id}</title>
 <style>body{{font:14px/1.5 system-ui,sans-serif;max-width:800px;margin:24px auto;padding:0 16px;color:#111}}
 table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:13px}}
@@ -506,7 +501,7 @@ pre{{white-space:pre-wrap;background:#f5f5f5;padding:8px}}small{{color:#666}}</s
 <h1>Arbeidspapir: {e(d['title'] or '')}</h1>
 <p><b>Oppdragsgiver:</b> {e(d['buyer'] or '')} &nbsp; <b>Kunngjøring:</b> {e(d['id'])} ({e(d['pub_date'] or '')})<br>
 <b>Status:</b> {e(c['status'])} &nbsp; <b>Ansvarlig:</b> {e(c['assignee'] or '–')} &nbsp; <b>Utskrevet:</b> {db.now()}</p>
-<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}) – røde flagg (CRI) {fmt(d['cri'])}{ml}.
+<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}) – røde flagg (CRI) {fmt(d['cri'])}. Klagerisiko (eksperimentell, teller ikke) {fmt(d['klagerisiko'])}.
 Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>{e(d['method'] or '')}</td></tr><tr><th>Antall tilbud</th><td>{fmt(d['num_bidders'])}</td></tr>

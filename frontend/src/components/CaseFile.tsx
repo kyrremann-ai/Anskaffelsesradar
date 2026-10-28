@@ -185,8 +185,6 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
 export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => void }) {
   const { data: d, isLoading } = useApi<ContractDetail>(`/api/contracts/${encodeURIComponent(id)}`);
   const { data: meta } = useApi<Meta>("/api/meta");
-  const { data: model } = useApi<{ weights: { mode?: string } | null }>("/api/model");
-  const mlCounts = model?.weights?.mode === "ml";
   const assess = useMutation({
     mutationFn: () => api(`/api/contracts/${encodeURIComponent(id)}/assess`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/contracts/${encodeURIComponent(id)}`] }),
@@ -223,12 +221,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
             <b className="font-medium">Klagerisiko (eksperimentell): {Math.round(d.klagerisiko)}</b>. Høyere klagerisiko enn {Math.round(d.klagerisiko)} % av kontraktene,
             ut fra verdi, oppdragsgivertype og type anskaffelse. Måler risiko for KOFA-klage, ikke korrupsjon, og teller ikke i prioriteten.
           </p>)}
-        <details className="col-span-2 text-xs text-muted">
-          <summary className="cursor-pointer">Delscorer</summary>
-          <p className="mt-1">Røde flagg (CRI) {Math.round(d.cri)}{mlCounts && <> · avvik {Math.round(d.anomaly)}</>}. {mlCounts ? "" : "Prioriteten bygger på de røde flaggene og registerflaggene."}</p>
-          <p className="mt-1">ML-modeller {Math.round(d.ml_score)} (logistisk regresjon {Math.round(d.ml_lr)}, Random Forest {Math.round(d.ml_rf)}, Gradient Boosting {Math.round(d.ml_gb)}){mlCounts
-            ? "." : <>: <b>under utvikling</b>, teller ikke i prioriteten ennå. Modellene er trent på syntetiske data og treffer ikke godt nok på ekte KOFA-saker.</>}</p>
-        </details>
+        <p className="col-span-2 text-xs text-muted">Røde flagg (CRI) {Math.round(d.cri)}. Prioriteten bygger på de røde flaggene og registerflaggene.</p>
       </section>
 
       {ai && (
@@ -246,25 +239,6 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         <Section title="Leverandør"><div className="space-y-2">{d.suppliers.map((s) => <Supplier key={s.orgnr} s={s} />)}</div></Section>
       )}
 
-      {d.drivers.length > 0 && (
-        <Section title={mlCounts ? "Hva driver ML-scoren" : "Hva driver ML-scoren (under utvikling)"}>
-          <p className="mb-2 text-xs text-muted">Endring i prosentpoeng hvis feltet hadde hatt en typisk verdi.</p>
-          <div className="space-y-2">
-            {d.drivers.map((p) => (
-              <div key={p.feature} className="grid grid-cols-[1fr_120px_48px] items-center gap-3 text-sm">
-                <span className="truncate">{p.feature}</span>
-                <div className="relative h-2 rounded bg-sunk">
-                  <div className="absolute top-0 h-2 rounded" style={{
-                    left: p.effect >= 0 ? "50%" : `${50 - Math.min(50, Math.abs(p.effect) * 2)}%`,
-                    width: `${Math.min(50, Math.abs(p.effect) * 2)}%`, background: p.effect >= 0 ? "var(--hi)" : "var(--lo)" }} />
-                  <div className="absolute left-1/2 top-[-2px] h-3 w-px bg-line" />
-                </div>
-                <span className="num text-right text-xs">{p.effect > 0 ? "+" : ""}{p.effect.toLocaleString("nb-NO")}</span>
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
 
       <Section title="Nøkkeldata">
         <dl>

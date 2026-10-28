@@ -1,15 +1,15 @@
 # Anskaffelsesradar
 
-Prioriterer offentlige anskaffelser for kommunerevisjon. Data hentes fra TED, Doffin og Brønnøysundregistrene, og hver kontrakt får røde flagg, tre ML-modeller og avviksdeteksjon samlet i én prioritet. Revisoren jobber i en arbeidsflate med saker, logg og arbeidspapir.
+Prioriterer offentlige anskaffelser for kommunerevisjon. Data hentes fra TED, Doffin og Brønnøysundregistrene, og hver kontrakt får regelbaserte røde flagg og registerflagg samlet i én prioritet, pluss en eksperimentell klagerisiko trent på ekte KOFA-saker. Revisoren jobber i en arbeidsflate med saker, logg og arbeidspapir.
 
 > Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.
-> Modellene er trent på syntetiske data, som i eksamensrapporten (Foros 2026). Neste steg er ekte fasit fra KOFA.
+> ML-modellene fra eksamensrapporten (Foros 2026, syntetiske data) er fjernet fra appen: de traff ikke bedre enn tilfeldig på ekte KOFA-saker.
 
 ## Hva er nytt i v2
 
 - **Mine enheter**: velg kommunene og foretakene du reviderer. Hele appen filtreres på dem, og nøkkeltall sammenlignes med hele Norge.
 - **Arbeidsflate**: prioritert kø og saksmappe side om side. Erstatter Risikoregister og Saksliste.
-- **Én prioritetsscore (0–100)**. ML, CRI og avvik vises som delscorer.
+- **Én prioritetsscore (0–100)** fra røde flagg (CRI) og registerflagg. Klagerisiko vises ved siden av og teller ikke.
 - **Brønnøysund**: Enhetsregisteret og roller per leverandør og oppdragsgiver. Gir 11 nye flagg, blant annet stiftet etter kunngjøring, konkurs, ikke MVA-registrert, felles styremedlem med oppdragsgiver og felles roller eller adresse mellom konkurrerende leverandører. Ny side **Leverandører** med koblinger via personer.
 - **Sporbarhet**: alle endringer på en sak logges med hvem og når. AI-vurderinger lagres med modell, tidspunkt og feltene som ble sendt. Hver sak har et arbeidspapir for utskrift eller PDF.
 - **AI via Mistral (EU)** bak en adapter. Uten nøkkel brukes en regelbasert mal. Personnavn sendes aldri til LLM.
@@ -23,8 +23,9 @@ backend/radar/
   ingest/ted.py      TED Search API v3 → eForms-XML per kunngjøring (cache på disk)
   ingest/doffin.py   Doffin Public API v2 (live-visning, krever gratis nøkkel)
   ingest/brreg.py    Enhetsregisteret + roller, Brreg-flagg
-  synthetic.py       treningsgenerator fra rapporten + fiktive demodata
-  scoring.py         røde flagg (CRI), LR/RF/GB, Isolation Forest, prioritet
+  synthetic.py       fiktive demodata (+ rapportens treningsgenerator, brukt som baseline i kofa_eval)
+  scoring.py         røde flagg (CRI), registerflagg, prioritet, klagerisiko
+  klagerisiko.py     modell for KOFA-klage, lagret i models/klagerisiko.json
   llm.py             Mistral-adapter + regelbasert fallback
   pipeline.py        innhenting → scoring («Hent nye data», cron, CLI)
   api.py             FastAPI, serverer også den bygde klienten
@@ -130,7 +131,7 @@ Personvern: kandidatlister, PEP og personlige eiere er personopplysninger. Treff
 
 ## Kjente begrensninger
 
-- Treningsdata er syntetiske (rapportens generator). `amendment_count` og `subcontractor_pct` er tatt ut av modellen fordi TED ikke har dem.
+- Klagerisiko er trent på KOFA-saker koblet til Doffin med navnesøk. Kommuner er lettere å koble enn statlige etater, så kommune-effekten kan være delvis kunstig.
 - Rammeavtaler oppgir ofte maksverdi. Overskridelsesflagget får derfor halv vekt på rammeavtaler.
 - Reelle rettighetshavere er ikke åpent. Eierskap dekkes av Aksjonærregisteret (årlig fil, ett år gammel) og eventuelt Proff API.
 - Adapterne for Regnskapsregisteret, Arbeidstilsynet, OpenSanctions og Proff er testet mot fixtures, ikke mot live-tjenestene. Proff-feltnavn må bekreftes mot deres dokumentasjon når avtalen er på plass.

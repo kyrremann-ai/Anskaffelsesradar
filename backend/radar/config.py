@@ -16,8 +16,6 @@ class Settings:
     # "demo" fyller databasen med syntetiske kontrakter ved første oppstart.
     # "live" henter fra TED/Doffin/Brreg.
     mode: str = field(default_factory=lambda: _env("RADAR_MODE", "demo"))
-    # Prioritet: «regler» (røde flagg + registerflagg) eller «ml» (blanding med ML-modellene)
-    priority_mode: str = field(default_factory=lambda: _env("PRIORITET", "regler"))
     ted_from: str = field(default_factory=lambda: _env("TED_FROM", "2025-01-01"))
     doffin_api_key: str = field(default_factory=lambda: _env("DOFFIN_API_KEY"))
     # Doffin-tildelinger i live-modus. Nøkkelen kan også legges på av en proxy, så den kreves ikke her.

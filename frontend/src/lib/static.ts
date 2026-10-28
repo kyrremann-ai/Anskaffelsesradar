@@ -4,7 +4,7 @@
 // Saker lagres i artifactens database (db-kapabiliteten), så de deles mellom brukerne.
 import type { Case, CaseEvent, ContractRow, Group, Stats, SupplierCard } from "./api";
 
-type Row = ContractRow & Record<string, unknown> & { winner: string | null; drivers: { feature: string; effect: number }[] };
+type Row = ContractRow & Record<string, unknown> & { winner: string | null };
 type Card = SupplierCard & { links: { orgnr: string; name: string; via: string; rolle: string; is_buyer: boolean }[] };
 type StoredCase = Omit<Case, "id" | "events"> & { events: (CaseEvent & { actor_id?: string | null })[] };
 
@@ -250,7 +250,7 @@ export async function exportCsv(params: Record<string, unknown>) {
   const { rows } = await load();
   const p = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => [k, String(v)]));
   const cols = ["id", "pub_date", "title", "buyer", "region", "sector", "method", "num_bidders", "est_value", "award_value",
-    "priority", "tier", "ml_score", "cri", "anomaly"];
+    "priority", "tier", "cri", "klagerisiko"];
   const lines = [[...cols, "leverandører", "flagg", "sak"].join(";")];
   for (const r of filter(rows, p)) {
     lines.push([...cols.map((c) => nb(r[c])), r.winner_names.join(", "), r.flags.map((f) => f.label).join(", "), caseStatus(r) ?? ""]
@@ -264,21 +264,21 @@ export async function exportLabels() {
   const { rows } = await load();
   const byKey = new Map(rows.map((r) => [keyOf(r.id), r]));
   const cols = ["kontrakt_id", "tittel", "oppdragsgiver", "vurdering", "relevant", "begrunnelse", "vurdert_av", "vurdert",
-    "status", "prioritet", "cri", "ml_score", "flagg"];
+    "status", "prioritet", "cri", "klagerisiko", "flagg"];
   const lines = [cols.join(";")];
   for (const key of cases.keys()) {
     const c = await caseOut(key), r = byKey.get(key);
     if (!c?.vurdering) continue;
     const ev = c.events.find((e) => e.field === "vurdering"); // nyeste først
     lines.push([r?.id ?? key, c.title, c.buyer, c.vurdering, c.vurdering === "Relevant" ? "1" : "0", c.vurdering_grunn ?? "",
-      ev?.actor ?? "", ev?.at ?? "", c.status, nb(r?.priority), nb(r?.cri), nb(r?.ml_score), (r?.flags ?? []).map((f) => f.label).join(", ")]
+      ev?.actor ?? "", ev?.at ?? "", c.status, nb(r?.priority), nb(r?.cri), nb(r?.klagerisiko), (r?.flags ?? []).map((f) => f.label).join(", ")]
       .map((v) => String(v ?? "")).map((v) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(";"));
   }
   await save("revisorvurderinger.csv", "\ufeff" + lines.join("\n"));
 }
 
 export async function saveWorkpaper(key: string) {
-  const { rows, cards, model } = await load();
+  const { rows, cards } = await load();
   const c = await caseOut(key);
   const d = rows.find((r) => keyOf(r.id) === key);
   if (!c || !d) throw new HttpError("Fant ikke saken");
@@ -293,7 +293,7 @@ pre{white-space:pre-wrap;background:#f5f5f5;padding:8px}small{color:#666}</style
 <h1>Arbeidspapir: ${esc(d.title)}</h1>
 <p><b>Oppdragsgiver:</b> ${esc(d.buyer)} &nbsp; <b>Kunngjøring:</b> ${esc(d.id)} (${esc(d.pub_date)})<br>
 <b>Status:</b> ${esc(c.status)} &nbsp; <b>Ansvarlig:</b> ${esc(c.assignee || "–")} &nbsp; <b>Utskrevet:</b> ${new Date().toISOString().slice(0, 19)}</p>
-<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}) – røde flagg (CRI) ${fmt(d.cri)}${model.weights?.mode === "ml" ? `, ML ${fmt(d.ml_score)}, avvik ${fmt(d.anomaly)}` : `. ML-score ${fmt(d.ml_score)} er under utvikling og teller ikke`}.
+<p><b>Prioritet:</b> ${fmt(d.priority)} (${esc(d.tier)}) – røde flagg (CRI) ${fmt(d.cri)}. Klagerisiko (eksperimentell, teller ikke) ${fmt(d.klagerisiko)}.
 Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>${esc(d.method)}</td></tr><tr><th>Antall tilbud</th><td>${fmt(d.num_bidders)}</td></tr>

@@ -14,14 +14,14 @@ from pathlib import Path
 import pandas as pd
 
 from . import api, db, llm, pipeline
-from .scoring import FLAG_LABELS, feature_frame
+from .scoring import FLAG_LABELS
 
 # Artifacten tillater 16 MB per fil. Deler gir god margin og laster parallelt.
 CONTRACTS_PER_FILE = 2500
 CARDS_PER_FILE = 2500
 
 FULL = ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months", "winner_size",
-        "repeat_pair_count", "prev_contract", "winner_market_share_pct", "ml_lr", "ml_rf", "ml_gb"]
+        "repeat_pair_count", "prev_contract", "winner_market_share_pct"]
 
 
 def _clean(v):
@@ -40,8 +40,6 @@ def _clean(v):
 def export(out: Path, log=print) -> dict[str, int]:
     out.mkdir(parents=True, exist_ok=True)
     df = api.frame()
-    bundle = pipeline.bundle()
-    X = feature_frame(df)
     journal = {r["contract_id"]: json.loads(r["items"]) for r in api.con.execute("SELECT contract_id, items FROM einnsyn")}
     rows = []
     for i, r in df.iterrows():
@@ -49,7 +47,6 @@ def export(out: Path, log=print) -> dict[str, int]:
         o.pop("case_id", None)
         o.pop("case_status", None)
         o["winner"] = r.winner if isinstance(r.winner, str) else None
-        o["drivers"] = bundle.drivers(X.loc[i])
         if r.id in journal:
             o["einnsyn"] = journal[r.id]
         rows.append(o)

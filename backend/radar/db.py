@@ -39,8 +39,7 @@ CREATE INDEX IF NOT EXISTS ix_contracts_buyer ON contracts(buyer_id);
 CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
-    ml_score REAL, ml_lr REAL, ml_rf REAL, ml_gb REAL,
-    cri REAL, anomaly REAL, klagerisiko REAL,
+    cri REAL, klagerisiko REAL,
     repeat_pair_count REAL, prev_contract REAL, winner_market_share_pct REAL,
     award_over_estimate_pct REAL, data_coverage INTEGER,
     flags TEXT                        -- JSON-liste [{key,label,weight,source}]

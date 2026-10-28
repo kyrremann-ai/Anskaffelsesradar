@@ -19,7 +19,6 @@ import csv
 import re
 import time
 from datetime import datetime
-from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib import robotparser
