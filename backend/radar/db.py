@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS brreg_entities (
     orgnr TEXT PRIMARY KEY, fetched_at TEXT, data TEXT
 );
 CREATE TABLE IF NOT EXISTS brreg_roles (
-    orgnr TEXT, rolle TEXT, rolle_navn TEXT, type TEXT, person_key TEXT, navn TEXT, er_doed INTEGER
+    orgnr TEXT, rolle TEXT, rolle_navn TEXT, type TEXT, person_key TEXT, navn TEXT, er_doed INTEGER,
+    fodselsaar INTEGER               -- bare år, brukes til matching mot kandidatlister og PEP
 );
 CREATE INDEX IF NOT EXISTS ix_roles_org ON brreg_roles(orgnr);
 CREATE INDEX IF NOT EXISTS ix_roles_person ON brreg_roles(person_key);
@@ -74,6 +75,41 @@ CREATE TABLE IF NOT EXISTS assessments (
     contract_id TEXT, at TEXT, provider TEXT, model TEXT, input TEXT, text TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+
+-- Regnskapsregisteret (siste år per orgnr)
+CREATE TABLE IF NOT EXISTS regnskap (
+    orgnr TEXT PRIMARY KEY, aar INTEGER, driftsinntekter REAL, driftsresultat REAL, aarsresultat REAL,
+    egenkapital REAL, gjeld REAL, eiendeler REAL, fetched_at TEXT
+);
+-- Eiere/aksjonærer (Proff eller annen kilde)
+CREATE TABLE IF NOT EXISTS owners (
+    orgnr TEXT, owner_name TEXT, owner_orgnr TEXT, owner_birth_year INTEGER, share_pct REAL,
+    source TEXT, year INTEGER, fetched_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_owners_org ON owners(orgnr);
+-- Offentlige godkjenningsregistre (renhold, bemanning)
+CREATE TABLE IF NOT EXISTS registers (
+    register TEXT, orgnr TEXT, navn TEXT, status TEXT, PRIMARY KEY (register, orgnr)
+);
+-- Kandidatlister fra valg (navn normalisert + fødselsår)
+CREATE TABLE IF NOT EXISTS politicians (
+    navn_norm TEXT, fodselsaar INTEGER, kommunenr TEXT, kommune TEXT, parti TEXT, valgt INTEGER, valg TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_pol ON politicians(navn_norm, fodselsaar);
+-- Sanksjons- og PEP-lister (OpenSanctions, filtrert på Norge)
+CREATE TABLE IF NOT EXISTS sanctions (
+    id TEXT PRIMARY KEY, schema TEXT, name TEXT, name_norm TEXT, birth_year INTEGER, orgnr TEXT,
+    is_sanction INTEGER, datasets TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_sanc_name ON sanctions(name_norm);
+-- KOFA-avgjørelser
+CREATE TABLE IF NOT EXISTS kofa_cases (
+    saksnr TEXT PRIMARY KEY, dato TEXT, innklaget TEXT, innklaget_orgnr TEXT, leverandor TEXT,
+    tittel TEXT, brudd INTEGER, ulovlig_direkte INTEGER, url TEXT
+);
+CREATE TABLE IF NOT EXISTS kofa_matches (
+    saksnr TEXT, contract_id TEXT, score REAL, PRIMARY KEY (saksnr, contract_id)
+);
 """
 
 
@@ -88,6 +124,9 @@ def connect(path: Path) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(brreg_roles)")}
+    if "fodselsaar" not in cols:  # databaser fra før v2.1
+        con.execute("ALTER TABLE brreg_roles ADD COLUMN fodselsaar INTEGER")
     return con
 
 
@@ -99,6 +138,16 @@ def tx(con: sqlite3.Connection):
     except Exception:
         con.rollback()
         raise
+
+
+def norm_name(s: str | None) -> str:
+    """Normaliserer navn for matching: små bokstaver, uten tegnsetting og selskapsform."""
+    import re
+    import unicodedata
+    s = unicodedata.normalize("NFKC", (s or "").lower())
+    s = re.sub(r"[^\wæøå ]+", " ", s)
+    s = re.sub(r"\b(as|asa|ans|da|sa|ba|nuf|ks|iks|kf)\b", " ", s)
+    return " ".join(s.split())
 
 
 def get_meta(con, key: str, default=None):

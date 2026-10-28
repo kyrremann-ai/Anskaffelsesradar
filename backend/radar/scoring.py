@@ -21,6 +21,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .db import get_meta, set_meta, tx
+from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
 from .synthetic import training_set
 
@@ -46,6 +47,8 @@ FLAG_LABELS = {
 CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
 # Vekting i prioritetsscoren. Dokumentert på metodesiden.
 W_ML, W_CRI, W_ANOM, BRREG_PER_WEIGHT, BRREG_CAP = 0.60, 0.25, 0.15, 8.0, 20.0
+# Minste antall KOFA-merkede kontrakter (per klasse) før de brukes i treningen
+KOFA_MIN = 30
 
 
 def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -79,9 +82,15 @@ def _models(seed: int) -> dict:
 
 
 class ModelBundle:
-    def __init__(self, seed: int = 42):
+    def __init__(self, seed: int = 42, real: tuple[pd.DataFrame, np.ndarray] | None = None):
         train = training_set(seed=seed)
         X, y = feature_frame(train), train.is_suspicious.to_numpy()
+        n_real = 0
+        if real is not None:
+            # Ekte KOFA-fasit legges til de syntetiske dataene (ikke erstatter dem ennå: for få saker)
+            X = pd.concat([X, real[0]], ignore_index=True)
+            y = np.concatenate([y, real[1]])
+            n_real = len(real[1])
         Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.25, stratify=y, random_state=seed)
         cv = StratifiedKFold(5, shuffle=True, random_state=seed)
         self.models, metrics = {}, []
@@ -99,7 +108,7 @@ class ModelBundle:
         self.importance = sorted(({"feature": FEATURE_LABELS[f], "value": float(v)} for f, v in zip(FEATURES, rf.feature_importances_)),
                                  key=lambda d: -d["value"])
         self.medians = X.median()
-        self.info = {"train": {"n": len(train), "positives": int(y.sum()), "seed": seed, "synthetic": True},
+        self.info = {"train": {"n": len(y), "positives": int(y.sum()), "seed": seed, "synthetic": True, "kofa": n_real},
                      "metrics": metrics, "importance": self.importance, "features": [FEATURE_LABELS[f] for f in FEATURES],
                      "excluded": ["amendment_count (finnes ikke i TED)", "subcontractor_pct (finnes ikke i TED)"]}
 
@@ -137,6 +146,15 @@ def contracts_frame(con) -> pd.DataFrame:
     ok = df.est_value.gt(0) & df.award_value.notna()
     df["award_over_estimate_pct"] = ((df.award_value / df.est_value - 1) * 100).where(ok)
     return df
+
+
+def kofa_training(con, labels: dict[str, int]) -> tuple[pd.DataFrame, np.ndarray] | None:
+    """Features + fasit for kontrakter koblet til KOFA, når det finnes nok av begge klasser."""
+    if sum(labels.values()) < KOFA_MIN or sum(1 for v in labels.values() if v == 0) < KOFA_MIN:
+        return None
+    df = contracts_frame(con)
+    df = df[df.id.isin(labels)].reset_index(drop=True)
+    return feature_frame(df), df.id.map(labels).to_numpy().astype(int)
 
 
 def rule_flags(r) -> list[dict]:
@@ -186,13 +204,15 @@ def score_all(con, bundle: ModelBundle, log=print) -> int:
     df["anomaly"] = pct_rank(pd.Series(-iso.fit(Xi).score_samples(Xi), index=df.index))
 
     brreg = BrregIndex(con)
+    extra = ExtraIndex(con, brreg.ent)
     suppliers_by_buyer = df.explode("winner_ids").groupby("buyer_id").winner_ids.agg(lambda s: set(s.dropna())).to_dict()
     flags, cri, bboost = [], [], []
     for r in df.itertuples():
         fl = rule_flags(r)
-        c = {"buyer_id": r.buyer_id, "winner_ids": r.winner_ids, "pub_date": r.pub_date, "cpv": r.cpv,
+        c = {"id": r.id, "buyer_id": r.buyer_id, "winner_ids": r.winner_ids, "pub_date": r.pub_date, "cpv": r.cpv,
              "award_value": r.award_value, "est_value": r.est_value}
-        bf = brreg.flags(c, suppliers_by_buyer.get(r.buyer_id, set()))
+        others = suppliers_by_buyer.get(r.buyer_id, set())
+        bf = brreg.flags(c, others) + extra.flags(c, others)
         flags.append(fl + bf)
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
         bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))
