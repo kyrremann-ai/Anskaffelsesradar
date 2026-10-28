@@ -19,12 +19,18 @@ class Settings:
     ted_from: str = field(default_factory=lambda: _env("TED_FROM", "2025-01-01"))
     doffin_api_key: str = field(default_factory=lambda: _env("DOFFIN_API_KEY"))
     # Doffin-tildelinger i live-modus. Nøkkelen kan også legges på av en proxy, så den kreves ikke her.
+    # Kandidatlister fra valg.no (kommunestyre/fylkesting 2023, storting 2025)
+    valg: bool = field(default_factory=lambda: _env("VALG", "på").lower() not in ("av", "0", "false"))
     # Journalposter fra eInnsyn for prioriterte kontrakter (åpent API)
     einnsyn: bool = field(default_factory=lambda: _env("EINNSYN", "på").lower() not in ("av", "0", "false"))
     doffin: bool = field(default_factory=lambda: _env("DOFFIN", "på").lower() not in ("av", "0", "false"))
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY"))
     # Billigste modell som skriver godt norsk. Bytt til mistral-medium-latest ved behov.
     mistral_model: str = field(default_factory=lambda: _env("MISTRAL_MODEL", "mistral-small-latest"))
+    # Claude som alternativ til demoer. Velges med LLM_PROVIDER=claude (eller automatisk når bare denne nøkkelen finnes).
+    anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
+    claude_model: str = field(default_factory=lambda: _env("CLAUDE_MODEL", "claude-haiku-5-5"))
+    llm_provider: str = field(default_factory=lambda: _env("LLM_PROVIDER"))
     person_salt: str = field(default_factory=lambda: _env("PERSON_SALT", "bytt-meg"))
     brreg_user_agent: str = field(
         default_factory=lambda: _env("BRREG_USER_AGENT", "Anskaffelsesradar/2.0 (kontakt: post@example.no)")
@@ -37,7 +43,7 @@ class Settings:
     proff_base_url: str = field(default_factory=lambda: _env("PROFF_BASE_URL", "https://api.proff.no"))
     proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
     renhold_register_url: str = field(default_factory=lambda: _env("RENHOLD_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/renhold_register.xml"))
-    bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL"))
+    bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL", "https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api"))
     # OpenSanctions er CC BY-NC: krever lisens ved kommersiell bruk. Av som standard.
     opensanctions_url: str = field(default_factory=lambda: _env("OPENSANCTIONS_URL"))
     opensanctions_api_key: str = field(default_factory=lambda: _env("OPENSANCTIONS_API_KEY"))

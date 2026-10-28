@@ -55,9 +55,26 @@ Klienten kan bygges som en artifact på claude.ai. Da regner nettleseren ut over
 RADAR_MODE=live deploy/build_artifact.sh ut/    # eller RADAR_DEMO=1 for demodata
 ```
 
-Publiser `ut/index.html` med `contracts.json`, `cards.json` og `meta.json` som filer, og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
+Publiser `ut/index.html` med alle `*.json` i mappen som filer (`meta.json` og dataene delt i `contracts-N.json` og `cards-N.json`, under grensen på 16 MB per fil), og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
 
 Begrensninger: brukerne må ha tilgang via claude.ai, dataene lagres hos Anthropic, AI-vurdering og Doffin live er av, og arbeidspapir/CSV lastes ned som filer.
+
+## Demo på radar.vikingsea.no (Cloudflare Pages + Access)
+
+Samme klient og JSON-filer som artifacten, men på eget domene. Bare inviterte e-poster kommer inn (engangskode fra Cloudflare Access, gratis opptil 50 brukere). Saker lagres i Cloudflare D1 via Pages Functions (`deploy/cloudflare/functions`), og loggen viser Access-e-posten til den som endret.
+
+Engangsoppsett:
+1. Cloudflare API-token med Account: Pages Edit, D1 Edit, Access: Apps and Policies Edit, Access: Audit Logs Read, og Zone (vikingsea.no): DNS Edit + Zone Read.
+2. GitHub-hemmeligheter: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DOFFIN_API_KEY`.
+3. Actions → «Radar-tilgang» → `setup` (Pages-prosjekt, D1, CNAME `radar`, Access-apper).
+4. Actions → «Radar på Cloudflare» bygger og publiserer. Den kjører så hver natt kl. 04.
+
+Tilgang: Actions → «Radar-tilgang» → `grant`/`revoke` + e-post, eller lokalt:
+
+```bash
+python deploy/cf_radar.py invite kari@firma.no Kari   # bruker ~/.config/havbruk/env som Havbruk Signal
+RADAR_DEMO=1 deploy/build_pages.sh ut-pages/ && python deploy/cf_radar.py deploy ut-pages/
+```
 
 ## Produksjon (Hetzner)
 

@@ -1,6 +1,6 @@
 """Eksporterer databasen til JSON-filer for den statiske artifact-versjonen av klienten.
 
-    python -m radar.export_static ut/        # skriver contracts.json, cards.json, meta.json
+    python -m radar.export_static ut/        # skriver contracts-N.json, cards-N.json, meta.json
 
 Klienten (bygget med VITE_STATIC=1) leser filene og regner ut oversikt, filtre og
 leverandørlister selv. Saker lagres i artifactens database, ikke her.
@@ -13,8 +13,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import api, db, pipeline
+from . import api, db, llm, pipeline
 from .scoring import FLAG_LABELS, feature_frame
+
+# Artifacten tillater 16 MB per fil. Deler gir god margin og laster parallelt.
+CONTRACTS_PER_FILE = 2500
+CARDS_PER_FILE = 2500
 
 FULL = ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months", "winner_size",
         "repeat_pair_count", "prev_contract", "winner_market_share_pct", "ml_lr", "ml_rf", "ml_gb"]
@@ -67,11 +71,20 @@ def export(out: Path, log=print) -> dict[str, int]:
         c["links"] = links
         cards[o] = c
     meta = api.meta() | {"refresh": {"running": False, "step": None, "log": [], "error": None}, "llm": "av", "doffin": False}
-    files = {
-        "contracts.json": rows,
-        "cards.json": cards,
-        "meta.json": {"meta": meta, "model": api.model(), "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()}},
-    }
+    files: dict[str, object] = {}
+    keys = list(cards)
+    for i in range(0, max(len(rows), 1), CONTRACTS_PER_FILE):
+        files[f"contracts-{i // CONTRACTS_PER_FILE + 1}.json"] = rows[i:i + CONTRACTS_PER_FILE]
+    for i in range(0, max(len(keys), 1), CARDS_PER_FILE):
+        files[f"cards-{i // CARDS_PER_FILE + 1}.json"] = {k: cards[k] for k in keys[i:i + CARDS_PER_FILE]}
+    parts = {"contracts": [f for f in files if f.startswith("contracts-")], "cards": [f for f in files if f.startswith("cards-")]}
+    files["meta.json"] = {"meta": meta, "model": api.model(), "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()}, "files": parts,
+                         # Samme instruks som serverens AI-vurdering, så artifacten ber Claude om det samme
+                         "llm_system": llm.SYSTEM}
+    # Gamle filer fra forrige eksport fjernes, så publiseringen ikke tar med utdaterte deler
+    for old in [*out.glob("contracts*.json"), *out.glob("cards*.json")]:
+        if old.name not in files:
+            old.unlink()
     sizes = {}
     for name, data in files.items():
         s = json.dumps(_clean(data), ensure_ascii=False, allow_nan=False, separators=(",", ":"), default=lambda v: None if pd.isna(v) else str(v))

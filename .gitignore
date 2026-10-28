@@ -7,3 +7,4 @@ __pycache__/
 data/
 backend/data/
 backend/web
+pages-out/

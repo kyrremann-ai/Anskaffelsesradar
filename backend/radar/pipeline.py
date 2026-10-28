@@ -112,6 +112,7 @@ def live_sources(con) -> dict:
             if s.renhold_register_url else None, src)
     _source("Bemanningsregisteret", lambda: registers.refresh(con, "bemanning", s.bemanning_register_url, log=_log)
             if s.bemanning_register_url else None, src)
+    _source("Kandidatlister (valg.no)", lambda: valg.refresh(con, log=_log) if s.valg else None, src)
     _source("OpenSanctions", lambda: sanctions.refresh(con, s.opensanctions_url, s.opensanctions_api_key, log=_log)
             if s.opensanctions_url else None, src)
     try:

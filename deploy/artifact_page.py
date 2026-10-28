@@ -3,7 +3,7 @@
     python deploy/artifact_page.py frontend/dist-static ut/index.html
 
 JS og CSS legges inline (artifact-sider kan bare laste skript fra godkjente CDN-er).
-Datafilene (contracts.json, cards.json, meta.json) publiseres ved siden av siden.
+Datafilene (meta.json, contracts-N.json, cards-N.json) publiseres ved siden av siden.
 """
 import sys
 from pathlib import Path

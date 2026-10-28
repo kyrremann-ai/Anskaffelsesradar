@@ -185,9 +185,9 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         <h2 className="text-lg font-semibold leading-snug [overflow-wrap:anywhere]">{d.title}</h2>
         <p className="text-sm text-muted">{d.buyer} · {d.region} · {d.sector}</p>
         <div className="flex flex-wrap gap-2 pt-1">
-          {!STATIC && <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
+          <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
-          </Button>}
+          </Button>
           {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i TED ↗</a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
