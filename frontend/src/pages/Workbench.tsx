@@ -50,7 +50,7 @@ export default function Workbench() {
         <Select label="Prosedyre" value={get("method")} onChange={(v) => set("method", v)} placeholder="Alle prosedyrer"
           items={["Åpen", "Begrenset", "Forhandling", "Direkte tildeling", "Annet"].map((m) => ({ v: m, l: m }))} />
         <Select label="Sak" value={get("sak")} onChange={(v) => set("sak", v)} placeholder="Med og uten sak"
-          items={[{ v: "uten", l: "Uten sak" }, { v: "med", l: "Med sak" }, ...(meta?.case_statuses ?? []).map((s) => ({ v: s, l: `Sak: ${s}` }))]} />
+          items={[{ v: "uten", l: "Uten sak" }, { v: "med", l: "Med sak" }, { v: "apne", l: "Åpne saker" }, ...(meta?.case_statuses ?? []).map((s) => ({ v: s, l: `Sak: ${s}` }))]} />
         {get("supplier") && <Button variant="outline" onClick={() => set("supplier", "")}>Leverandør {get("supplier")} ✕</Button>}
       </div>
 

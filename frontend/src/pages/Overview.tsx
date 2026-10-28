@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Empty, Kpi, Meter, PageHead, Skeleton, TierBadge, scoreColor } from "../components/ui";
-import { useApi, type ContractRow, type Summary } from "../lib/api";
+import { useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { MONTHS, date, int, nok, pct } from "../lib/format";
 import { useScope } from "../lib/scope";
 
@@ -16,11 +16,13 @@ function vs(mine: number | null | undefined, nat: number | null | undefined) {
 export default function Overview() {
   const { param: buyers, buyers: sel } = useScope();
   const { data: s } = useApi<Summary>("/api/summary", { buyers }, { refetchInterval: (q) => (q.state.data?.n ? false : 3000) });
+  const { data: meta } = useApi<Meta>("/api/meta");
   const { data: top } = useApi<{ rows: ContractRow[] }>("/api/contracts", { buyers, limit: 8, case_status: "uten" });
   if (!s) return <div className="space-y-4"><Skeleton className="h-10 w-80" /><Skeleton className="h-24" /><Skeleton className="h-72" /></div>;
   if (!s.n) return <Empty>{s.loading ? "Laster data og kjører modellene første gang. Det tar et øyeblikk …" : "Ingen kontrakter ennå. Trykk «Hent nye data»."}</Empty>;
   const monthly = s.monthly.map((m) => ({ ...m, label: `${MONTHS[Number(m.month.slice(5)) - 1]} ${m.month.slice(2, 4)}` }));
   const maxFlag = Math.max(...s.flag_counts.map((f) => f.n));
+  const sources = `${meta?.sources?.Doffin?.status === "ok" ? "TED og Doffin" : "TED"}, tildelt`;
   const open = Object.entries(s.cases).filter(([k]) => !k.startsWith("Avsluttet")).reduce((a, [, n]) => a + n, 0);
   return (
     <div>
@@ -29,12 +31,12 @@ export default function Overview() {
         right={<Link to="/arbeid" className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90">Åpne arbeidsflaten →</Link>} />
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 2xl:grid-cols-6">
-        <Kpi label="Kontrakter" value={int(s.n)} sub="TED, tildelt" />
-        <Kpi label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt" />
-        <Kpi label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
-        <Kpi label="Kun ett tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med tilbudstall" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
-        <Kpi label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Uten konkurranse" compare={vs(s.direct_pct, s.national?.direct_pct)} />
-        <Kpi label="Åpne saker" value={int(open)} sub={`Tildelt verdi ${nok(s.total_value)}`} />
+        <Kpi to="/arbeid" label="Kontrakter" value={int(s.n)} sub={sources} />
+        <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt" />
+        <Kpi to="/arbeid?tier=Forhøyet" label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
+        <Kpi to="/arbeid?flag=single_bid" label="Kun ett tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med tilbudstall" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
+        <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Uten konkurranse" compare={vs(s.direct_pct, s.national?.direct_pct)} />
+        <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub={`Tildelt verdi ${nok(s.total_value)}`} />
       </div>
       <p className="mt-2 text-xs text-muted">Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi.</p>
 

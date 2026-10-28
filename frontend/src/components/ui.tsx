@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { Tier } from "../lib/api";
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -34,15 +35,19 @@ export function PageHead({ title, desc, right }: { title: string; desc?: ReactNo
   );
 }
 
-export function Kpi({ label, value, sub, compare }: { label: string; value: ReactNode; sub?: ReactNode; compare?: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-md border border-line bg-surface px-3 py-2.5 sm:px-3.5 sm:py-3">
+export function Kpi({ label, value, sub, compare, to }: { label: string; value: ReactNode; sub?: ReactNode; compare?: ReactNode; to?: string }) {
+  const cls = "block min-w-0 rounded-md border border-line bg-surface px-3 py-2.5 sm:px-3.5 sm:py-3";
+  const body = (
+    <>
       <div className="truncate text-[11px] font-medium uppercase leading-tight tracking-wide text-muted" title={typeof label === "string" ? label : undefined}>{label}</div>
       <div className="num mt-1 text-xl font-bold leading-none sm:text-2xl">{value}</div>
       {sub && <div className="mt-1 text-xs leading-snug text-muted">{sub}</div>}
       {compare && <div className="mt-1 text-xs leading-snug text-muted">{compare}</div>}
-    </div>
+    </>
   );
+  // Med lenke: hele kortet åpner arbeidsflaten med tilsvarende filter
+  return to ? <Link to={to} className={cx(cls, "transition-colors hover:border-accent hover:bg-sunk focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent")}>{body}</Link>
+    : <div className={cls}>{body}</div>;
 }
 
 const TIER = {

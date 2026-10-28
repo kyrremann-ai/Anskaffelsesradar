@@ -214,6 +214,8 @@ def _filter(df, q, tier, method, sector, region, flag, supplier, case_status):
         df = df[df.case_status.isna()]
     elif case_status == "med":
         df = df[df.case_status.notna()]
+    elif case_status == "apne":
+        df = df[df.case_status.notna() & ~df.case_status.fillna("").str.startswith("Avsluttet")]
     elif case_status:
         df = df[df.case_status == case_status]
     return df
