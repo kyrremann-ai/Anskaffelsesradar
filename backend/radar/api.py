@@ -126,7 +126,7 @@ def health():
 @app.get("/api/meta")
 def meta():
     return {"mode": db.get_meta(con, "mode", settings.mode), "updated_at": db.get_meta(con, "updated_at"),
-            "refresh": pipeline.status, "llm": "mistral" if settings.mistral_api_key else "mal",
+            "refresh": pipeline.status, "llm": llm.provider(settings).name,
             "doffin": settings.doffin, "case_statuses": CASE_STATUSES,
             "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
             "sources": db.get_meta(con, "sources") or {}}
@@ -291,10 +291,10 @@ def assess(cid: str):
     r = _contract(cid)
     c = row_out(r, full=True)
     try:
-        inp, text = llm.assess(llm.provider(settings.mistral_api_key, settings.mistral_model), c)
+        inp, text = llm.assess(llm.provider(settings), c)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"AI-vurdering feilet: {e}") from e
-    p = llm.provider(settings.mistral_api_key, settings.mistral_model)
+    p = llm.provider(settings)
     with db.tx(con):
         cur = con.execute("INSERT INTO assessments(contract_id, at, provider, model, input, text) VALUES (?,?,?,?,?,?)",
                           (cid, db.now(), p.name, p.model, json.dumps(inp, ensure_ascii=False, default=str), text))

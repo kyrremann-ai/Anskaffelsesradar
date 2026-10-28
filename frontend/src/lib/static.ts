@@ -13,13 +13,70 @@ declare global { interface Window { claude?: { use(name: string): Promise<any> }
 
 class HttpError extends Error {}
 
-let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any }> | null = null;
+let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string }> | null = null;
+const getJson = (f: string) => fetch(f).then((r) => {
+  if (!r.ok) throw new HttpError(`Fant ikke ${f}`);
+  return r.json();
+});
+
+// Dataene er delt i flere filer (grense per fil i artifacten); meta.json lister dem
 function load() {
-  data ??= Promise.all(["contracts.json", "cards.json", "meta.json"].map((f) => fetch(f).then((r) => {
-    if (!r.ok) throw new HttpError(`Fant ikke ${f}`);
-    return r.json();
-  }))).then(([rows, cards, m]) => ({ rows, cards, meta: m.meta, model: m.model }));
+  data ??= getJson("meta.json").then(async (m) => {
+    const parts: { contracts: string[]; cards: string[] } = m.files ?? { contracts: ["contracts.json"], cards: ["cards.json"] };
+    const [rows, cards] = await Promise.all([
+      Promise.all(parts.contracts.map(getJson)).then((xs) => xs.flat()),
+      Promise.all(parts.cards.map(getJson)).then((xs) => Object.assign({}, ...xs)),
+    ]);
+    return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined };
+  });
   return data;
+}
+
+// ------------------------------------------------------------------ AI-vurdering (Claude via artifacten)
+
+// Demo: Claude svarer på brukerens egen Claude-konto. Serverversjonen bruker Mistral (EU) eller Claude via API.
+const AI_MODEL = "claude-sonnet-5-5";
+
+// Samme felt som serverens build_input (llm.py). Ingen personnavn.
+function aiInput(c: Row) {
+  return {
+    Tittel: c.title, Oppdragsgiver: c.buyer, Publisert: c.pub_date, Prosedyre: c.method,
+    "Begrunnelse for prosedyre": c.justification ?? null, "Antall tilbud": c.num_bidders,
+    "Estimert verdi (NOK)": c.est_value, "Tildelt verdi (NOK)": c.award_value,
+    "Tildelt mot estimat (%)": c.award_over_estimate_pct, Rammeavtale: !!c.framework,
+    "Varighet (mnd)": c.contract_months ?? null, Leverandør: (c.winner_names ?? []).join(", "),
+    "Tidligere tildelinger samme par": c.repeat_pair_count ?? null, CPV: c.cpv ?? null,
+    Prioritet: c.priority != null ? Math.round(c.priority) : null, Prioritetsnivå: c.tier,
+    "Røde flagg": (c.flags ?? []).map((f) => f.label),
+  };
+}
+
+async function assess(r: Row, system?: string) {
+  const sample = await window.claude?.use("sample").catch(() => null);
+  if (!sample || !system) throw new HttpError("AI-vurdering er ikke tilgjengelig i denne visningen.");
+  let res;
+  try {
+    res = await sample(`${system}\n\nKontrakt:\n${JSON.stringify(aiInput(r))}`, { model: AI_MODEL, modelTier: "default", cache: false });
+  } catch (e: any) {
+    if (e?.code === "not_granted") throw new HttpError("Du må tillate at siden bruker Claude for å få en AI-vurdering.");
+    if (e?.code === "rate_limited") throw new HttpError("For mange forespørsler akkurat nå. Prøv igjen om litt.");
+    throw new HttpError(`AI-vurdering feilet: ${e?.message ?? e}`);
+  }
+  const a = { at: new Date().toISOString(), provider: "claude", model: res.modelApplied ?? AI_MODEL, text: res.text, ...(await actor()) };
+  // Huskes lokalt uansett, i tilfelle databasen ikke tar imot vurderinger (f.eks. Cloudflare-versjonen)
+  localAssessments.set(keyOf(r.id), a);
+  const d = await db();
+  try { await d?.doc(`assessments/${keyOf(r.id)}`).set(a); } catch { /* lokalt holder */ }
+  return a;
+}
+
+const localAssessments = new Map<string, any>();
+async function assessments(key: string) {
+  const d = await db();
+  let a = null;
+  try { a = d ? await d.doc(`assessments/${key}`).get().then((s: any) => (s.exists ? s.data() : null)) : null; } catch { /* ingen get() */ }
+  a ??= localAssessments.get(key);
+  return a ? [{ id: 1, ...a }] : [];
 }
 
 // ------------------------------------------------------------------ saker (db)
@@ -252,7 +309,9 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
     return { rows: d.slice((page - 1) * limit, page * limit).map(rowOut), total: d.length };
   }
   if ((m = path.match(/^\/api\/contracts\/(.+)\/assess$/))) {
-    throw new HttpError("AI-vurdering krever serverversjonen (Mistral i EU). Den er av i artifact-versjonen.");
+    const r = rows.find((x) => x.id === decodeURIComponent(m![1]));
+    if (!r) throw new HttpError("Fant ikke kontrakten");
+    return assess(r, (await load()).llmSystem);
   }
   if ((m = path.match(/^\/api\/contracts\/([^/]+)$/))) {
     const id = decodeURIComponent(m[1]);
@@ -262,7 +321,7 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       .sort((a, b) => (b.pub_date ?? "").localeCompare(a.pub_date ?? "")).slice(0, 10)
       .map((x) => ({ id: x.id, title: x.title, pub_date: x.pub_date, tier: x.tier }));
     return { ...rowOut(r), sameSupplier: same, suppliers: r.winner_ids.map((o) => cards[o] ?? { orgnr: o, brreg: null, roles: [], owners: [], registers: {}, regnskap: null, sanctions: null, brreg_url: `https://virksomhet.brreg.no/nb/oppslag/enheter/${o}` }),
-      case: await caseOut(keyOf(id)), assessments: [] };
+      case: await caseOut(keyOf(id)), assessments: await assessments(keyOf(id)) };
   }
   if (path === "/api/suppliers") return suppliers(rows, cards, p);
   if ((m = path.match(/^\/api\/suppliers\/(\d+)$/))) {

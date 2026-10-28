@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bygger artifact-versjonen: henter data, scorer, eksporterer JSON og bygger klienten.
-# Resultatet i $OUT (index.html + contracts.json, cards.json, meta.json) publiseres som artifact.
+# Resultatet i $OUT (index.html + meta.json, contracts-N.json, cards-N.json) publiseres som artifact.
 #   RADAR_MODE=live deploy/build_artifact.sh ut/
 set -euo pipefail
 OUT=${1:-artifact-out}

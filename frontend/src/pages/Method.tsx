@@ -1,6 +1,6 @@
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Meter, PageHead, Skeleton } from "../components/ui";
-import { useApi, type SourceStatus } from "../lib/api";
+import { STATIC, useApi, type SourceStatus } from "../lib/api";
 import { dateTime } from "../lib/format";
 
 type Model = {
@@ -74,6 +74,12 @@ export default function Method() {
           </ol>
           <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = ({w?.ml ?? 0.6} × ML + {w?.cri ?? 0.25} × CRI + {w?.anomaly ?? 0.15} × avvik + register) / 1,2</p>
           <p className="mt-2 text-sm text-muted">Høy prioritet = topp 5 % nasjonalt, forhøyet = persentil 80–95. Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
+          <p className="mt-2 text-sm text-muted">
+            <b>AI-vurdering:</b> {STATIC
+              ? "I denne demoen skriver Claude (Anthropic) vurderingen, på den innloggede brukerens Claude-konto."
+              : "Skrives av språkmodellen som er satt opp på serveren (Mistral i EU eller Claude)."} Modellen får bare
+            kontraktsfelt og flagg, aldri personnavn fra registrene. Vurderingen er beslutningsstøtte, ikke en konklusjon.
+          </p>
         </Card>
         <Card title="Røde flagg fra kunngjøringen" desc="Vekter fra Fazekas et al. (2013), som i rapporten">
           <ul className="divide-y divide-line text-sm">{m.flags.map((f) => (
@@ -102,6 +108,14 @@ export default function Method() {
           <ul className="divide-y divide-line text-sm">{(m.extra_flags ?? []).map((f) => (
             <li key={f.key} className="flex justify-between gap-3 py-1.5"><span>{f.label}<span className="block text-xs text-muted">{f.source}</span></span>
               <span className="num text-muted">{f.weight.toLocaleString("nb-NO")}</span></li>))}
+          </ul>
+        </Card>
+        <Card title="Personopplysninger og rettslig grunnlag" desc="Gjelder aksjonærregisteret, kandidatlister og roller i Brreg">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>
+            <li><b>Grunnlag:</b> revisjonens lovpålagte oppgave (kommuneloven kap. 24), jf. personvernforordningen art. 6 nr. 1 bokstav e. Anskaffelsesradar AS behandler opplysningene som databehandler for revisjonen. Grunnlaget og en vurdering av personvernkonsekvenser (DPIA) skal være på plass før personopplysninger tas i bruk hos en kunde.</li>
+            <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune og parti lagres fra kandidatlistene, og fødselsdato hashes fra Brreg. Personnavn sendes aldri til språkmodellen.</li>
+            <li><b>Treff er ikke bevis:</b> navn og fødselsår gir en <i>ubekreftet mulig kobling</i>, aldri en bekreftet identitet. Kandidat og innvalgt vises hver for seg. Aksjonærregisteret er et årsskiftebilde, ikke dagens eierskap.</li>
           </ul>
         </Card>
       </div>

@@ -55,7 +55,7 @@ Klienten kan bygges som en artifact på claude.ai. Da regner nettleseren ut over
 RADAR_MODE=live deploy/build_artifact.sh ut/    # eller RADAR_DEMO=1 for demodata
 ```
 
-Publiser `ut/index.html` med `contracts.json`, `cards.json` og `meta.json` som filer, og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
+Publiser `ut/index.html` med alle `*.json` i mappen som filer (`meta.json` og dataene delt i `contracts-N.json` og `cards-N.json`, under grensen på 16 MB per fil), og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
 
 Begrensninger: brukerne må ha tilgang via claude.ai, dataene lagres hos Anthropic, AI-vurdering og Doffin live er av, og arbeidspapir/CSV lastes ned som filer.
 
