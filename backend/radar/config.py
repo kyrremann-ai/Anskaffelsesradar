@@ -18,6 +18,10 @@ class Settings:
     mode: str = field(default_factory=lambda: _env("RADAR_MODE", "demo"))
     ted_from: str = field(default_factory=lambda: _env("TED_FROM", "2025-01-01"))
     doffin_api_key: str = field(default_factory=lambda: _env("DOFFIN_API_KEY"))
+    # Doffin-tildelinger i live-modus. Nøkkelen kan også legges på av en proxy, så den kreves ikke her.
+    # Journalposter fra eInnsyn for prioriterte kontrakter (åpent API)
+    einnsyn: bool = field(default_factory=lambda: _env("EINNSYN", "på").lower() not in ("av", "0", "false"))
+    doffin: bool = field(default_factory=lambda: _env("DOFFIN", "på").lower() not in ("av", "0", "false"))
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY"))
     # Billigste modell som skriver godt norsk. Bytt til mistral-medium-latest ved behov.
     mistral_model: str = field(default_factory=lambda: _env("MISTRAL_MODEL", "mistral-small-latest"))

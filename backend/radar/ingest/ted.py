@@ -1,11 +1,10 @@
 """TED (Tenders Electronic Daily): norske tildelingskunngjøringer.
 
-1. Søk etter publiseringsnumre via TED Search API v3 (åpent, uten nøkkel):
+Alle felt hentes fra TED Search API v3 (åpent, uten nøkkel), 250 kunngjøringer per kall:
    POST https://api.ted.europa.eu/v3/notices/search
-2. Hent eForms-XML per kunngjøring og parse feltene vi trenger:
-   GET https://ted.europa.eu/en/notice/{publication-number}/xml
 
-XML-en caches på disk (data/ted_xml/), så nye kjøringer bare henter nye kunngjøringer.
+eForms-XML per kunngjøring (ted.europa.eu/en/notice/{nr}/xml) står bak en bot-sperre og
+lastes ikke ned automatisk. Ligger XML-en allerede i data/ted_xml/, brukes den.
 eForms er standard for alle TED-kunngjøringer fra 2024, så 2025+ er dekket.
 """
 from __future__ import annotations
@@ -18,7 +17,6 @@ from pathlib import Path
 import httpx
 
 SEARCH_URL = "https://api.ted.europa.eu/v3/notices/search"
-XML_URL = "https://ted.europa.eu/en/notice/{pub}/xml"
 NOTICE_URL = "https://ted.europa.eu/en/notice/-/detail/{pub}"
 CAN_TYPES = "can-standard can-social can-desg can-tran"
 
@@ -56,45 +54,25 @@ SECTOR = {
 }
 
 
-def search_publication_numbers(client: httpx.Client, since: str, log=print) -> list[tuple[str, str]]:
-    """Returnerer [(publiseringsnummer, publiseringsdato)] for norske tildelinger siden `since` (YYYY-MM-DD)."""
-    query = (f"buyer-country=NOR AND notice-type IN ({CAN_TYPES}) "
-             f"AND publication-date>={since.replace('-', '')}")
-    body = {"query": query, "fields": ["publication-number", "publication-date"], "limit": 250,
-            "paginationMode": "ITERATION", "scope": "ALL"}
-    out: list[tuple[str, str]] = []
-    token = None
-    while True:
-        if token:
-            body["iterationNextToken"] = token
-        r = client.post(SEARCH_URL, json=body, timeout=60)
-        r.raise_for_status()
-        j = r.json()
-        for n in j.get("notices", []):
-            pd_ = n.get("publication-date") or ""
-            out.append((n["publication-number"], str(pd_)[:10]))
-        token = j.get("iterationNextToken")
-        log(f"  TED søk: {len(out)} treff")
-        if not token or not j.get("notices"):
-            return out
+def _wait(r: httpx.Response | None, attempt: int) -> None:
+    """TED begrenser antall kall (429). Vent det API-et ber om, ellers eksponentielt."""
+    after = r.headers.get("Retry-After") if r is not None else None
+    time.sleep(float(after) if after and after.isdigit() else min(60, 2 ** attempt * 2))
 
 
-def fetch_xml(client: httpx.Client, pub: str, cache: Path) -> bytes | None:
-    f = cache / f"{pub}.xml"
-    if f.exists():
-        return f.read_bytes()
-    for i in range(4):
+def _post(client: httpx.Client, body: dict, tries: int = 8) -> httpx.Response:
+    for i in range(tries):
+        r = None
         try:
-            r = client.get(XML_URL.format(pub=pub), timeout=60, follow_redirects=True)
-            if r.status_code == 200:
-                f.write_bytes(r.content)
-                return r.content
-            if r.status_code == 404:
-                return None
-        except httpx.HTTPError:
+            r = client.post(SEARCH_URL, json=body, timeout=60)
+            if r.status_code not in (429, 500, 502, 503, 504):
+                r.raise_for_status()
+                return r
+        except httpx.TransportError:
             pass
-        time.sleep(2 ** i)
-    return None
+        _wait(r, i)
+    r.raise_for_status() if r is not None else None
+    raise RuntimeError("TED svarte ikke etter flere forsøk")
 
 
 def _t(el, path: str) -> str | None:
@@ -185,25 +163,127 @@ def parse_notice(xml: bytes, pub: str, pub_date: str) -> dict | None:
     }
 
 
+# Feltene vi trenger, hentet direkte fra søke-API-et. XML-nedlastingen fra ted.europa.eu
+# står bak en bot-sperre (AWS WAF) som stopper automatiske kall etter noen få nedlastinger.
+FIELDS = ["publication-number", "publication-date", "notice-title", "buyer-name", "buyer-identifier", "buyer-country-sub",
+          "winner-identifier", "winner-name", "winner-size", "procedure-type", "procedure-accelerated",
+          "direct-award-justification-proc", "classification-cpv", "contract-nature", "result-value-notice",
+          "result-value-cur-notice", "result-value-lot", "estimated-value-proc", "estimated-value-lot",
+          "received-submissions-type-code", "received-submissions-type-val", "framework-agreement-lot",
+          "contract-framework-agreement", "duration-period-value-lot", "duration-period-unit-lot"]
+
+
+def search_notices(client: httpx.Client, since: str, log=print) -> list[dict]:
+    """Norske tildelinger siden `since` (YYYY-MM-DD), med alle felt vi bruker."""
+    query = (f"buyer-country=NOR AND notice-type IN ({CAN_TYPES}) "
+             f"AND publication-date>={since.replace('-', '')}")
+    body = {"query": query, "fields": FIELDS, "limit": 250, "paginationMode": "ITERATION", "scope": "ALL"}
+    out: list[dict] = []
+    while True:
+        j = _post(client, body).json()
+        out += j.get("notices", [])
+        log(f"  TED søk: {len(out)} treff")
+        if not j.get("iterationNextToken") or not j.get("notices"):
+            return out
+        body["iterationNextToken"] = j["iterationNextToken"]
+
+
+def _missing(x) -> bool:
+    # Norskspråklige kunngjøringer mangler ofte oversettelse i API-et og får en plassholder
+    return x is None or str(x).startswith("__NEEDS_TRANSLATION")
+
+
+def _list(v) -> list:
+    if v is None:
+        return []
+    if isinstance(v, dict):  # flerspråklig: {"nor": [...], "eng": [...]}
+        for lang in ("nor", "nob", "nno", "dan", "swe", "eng", *v):
+            if lang in v and (xs := _list(v[lang])):
+                return xs
+        return []
+    return [x for x in (v if isinstance(v, list) else [v]) if not _missing(x)]
+
+
+def _first(v):
+    return next(iter(_list(v)), None)
+
+
+def _sum(v) -> float | None:
+    xs = [x for x in map(_f, _list(v)) if x]
+    return sum(xs) or None
+
+
+def parse_fields(n: dict) -> dict | None:
+    """Samme rad som parse_notice, men fra søke-API-ets felt."""
+    pub = n["publication-number"]
+    title = None
+    for t in _list(n.get("notice-title")):
+        parts = t.split(" – ", 2)  # «Norge – CPV-tekst – Tittel»
+        title = parts[-1] if len(parts) == 3 else t
+        if "__NEEDS_TRANSLATION" in title:
+            title = parts[1] if len(parts) == 3 else None
+        break
+    proc = _first(n.get("procedure-type"))
+    cpv = _first(n.get("classification-cpv"))
+    codes, vals = _list(n.get("received-submissions-type-code")), _list(n.get("received-submissions-type-val"))
+    bidders = [_f(v) for c, v in zip(codes, vals) if c == "tenders"]
+    bidders = [b for b in bidders if b is not None]
+    ids, names = _list(n.get("winner-identifier")), _list(n.get("winner-name"))
+    winners: dict[str, str] = {}
+    for i, w in enumerate(ids):
+        winners.setdefault(w, names[i] if i < len(names) else w)
+    award = _f(_first(n.get("result-value-notice"))) or _sum(n.get("result-value-lot"))
+    est = _f(_first(n.get("estimated-value-proc"))) or _sum(n.get("estimated-value-lot"))
+    if (_first(n.get("result-value-cur-notice")) or "NOK") != "NOK":
+        award = est = None
+    months = None
+    if (d := _f(_first(n.get("duration-period-value-lot")))) is not None:
+        unit = (_first(n.get("duration-period-unit-lot")) or "MONTH").upper()
+        months = d * {"MONTH": 1, "DAY": 1 / 30.4, "YEAR": 12}.get(unit, 1)
+    fw = _list(n.get("framework-agreement-lot")) + _list(n.get("contract-framework-agreement"))
+    buyer_name = _first(n.get("buyer-name"))
+    buyer_id = _first(n.get("buyer-identifier")) or (buyer_name or "ukjent").lower().replace(" ", "-")
+    nuts = _first(n.get("buyer-country-sub"))
+    justification = _first(n.get("direct-award-justification-proc"))
+    accelerated = str(_first(n.get("procedure-accelerated"))).lower() == "true"
+    return {
+        "id": pub, "source": "ted", "url": NOTICE_URL.format(pub=pub),
+        "title": title, "pub_date": str(n.get("publication-date") or date.today().isoformat())[:10],
+        "buyer_id": "".join(ch for ch in buyer_id if ch.isalnum() or ch == "-"),
+        "buyer": buyer_name, "region": NUTS.get(nuts or "", "Ukjent"),
+        "sector": SECTOR.get((cpv or "")[:2], "Annet"), "cpv": cpv,
+        "nature": NATURE.get(_first(n.get("contract-nature")) or "", "Annet"),
+        "method": PROCEDURE.get(proc or "", "Annet"),
+        "accelerated": int(accelerated), "justification": justification,
+        "framework": int(any(str(c).startswith("fa") for c in fw)),
+        "num_bidders": max(bidders) if bidders else None,
+        "est_value": est, "award_value": award, "tender_duration_days": None, "contract_months": months,
+        "winner_ids": list(winners), "winner_names": list(winners.values()),
+        "winner_size": SIZE.get(_first(n.get("winner-size")) or "", None),
+        "raw": {"procedure": proc, "reasons": {"accelerated-procedure": str(accelerated).lower(),
+                                               **({"direct-award-justification": justification} if justification else {})},
+                "buyer_nuts": nuts},
+    }
+
+
+
 def refresh(con, data_dir: Path, since: str, log=print) -> list[dict]:
     """Henter nye norske tildelinger fra TED. Returnerer parsede kontrakter."""
     cache = data_dir / "ted_xml"
     cache.mkdir(parents=True, exist_ok=True)
     known = {r["id"] for r in con.execute("SELECT id FROM contracts WHERE source='ted'")}
     with httpx.Client(headers={"User-Agent": "Anskaffelsesradar/2.0"}) as client:
-        pubs = search_publication_numbers(client, since, log)
-        todo = [(p, d) for p, d in pubs if p not in known]
-        log(f"TED: {len(todo)} nye kunngjøringer")
-        rows = []
-        for i, (pub, d) in enumerate(todo, 1):
-            xml = fetch_xml(client, pub, cache)
-            if xml:
-                try:
-                    if row := parse_notice(xml, pub, d):
-                        rows.append(row)
-                except ET.ParseError as e:
-                    log(f"  kunne ikke parse {pub}: {e}")
-            if i % 200 == 0:
-                log(f"  TED {i}/{len(todo)}")
-            time.sleep(0.05)
+        notices = search_notices(client, since, log)
+    todo = [n for n in notices if n.get("publication-number") not in known]
+    log(f"TED: {len(todo)} nye kunngjøringer")
+    rows = []
+    for n in todo:
+        # Bruk XML fra tidligere kjøringer hvis den finnes (mer detaljert), ellers feltene fra søket
+        f = cache / f"{n['publication-number']}.xml"
+        try:
+            row = parse_notice(f.read_bytes(), n["publication-number"], str(n.get("publication-date"))[:10]) if f.exists() else None
+        except ET.ParseError:
+            row = None
+        if row := row or parse_fields(n):
+            rows.append(row)
     return rows

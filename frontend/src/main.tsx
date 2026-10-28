@@ -1,10 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Navigate, Route, HashRouter as Router, Routes } from "react-router-dom";
+import { HashRouter, MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import "./index.css";
-import { queryClient } from "./lib/api";
+import { STATIC, queryClient } from "./lib/api";
 import { ScopeProvider } from "./lib/scope";
 import Buyers from "./pages/Buyers";
 import Doffin from "./pages/Doffin";
@@ -12,6 +12,9 @@ import Method from "./pages/Method";
 import Overview from "./pages/Overview";
 import { SupplierPage, Suppliers } from "./pages/Suppliers";
 import Workbench from "./pages/Workbench";
+
+// Artifact-siden kan ikke styre adresselinjen, så der holdes navigasjonen i minnet
+const Router = STATIC ? MemoryRouter : HashRouter;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

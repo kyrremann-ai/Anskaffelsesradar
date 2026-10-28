@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, queryClient, useApi, type ContractDetail, type Flag, type Meta, type SupplierCard } from "../lib/api";
+import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type Meta, type SupplierCard } from "../lib/api";
+import { saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, nok, pct, signedPct } from "../lib/format";
 import { Button, Meter, Skeleton, TierBadge, cx, scoreColor } from "./ui";
 
@@ -109,6 +110,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
   const c = d.case;
   const [note, setNote] = useState(c?.note ?? "");
   const [assignee, setAssignee] = useState(c?.assignee ?? "");
+  const [fileError, setFileError] = useState("");
   useEffect(() => { setNote(c?.note ?? ""); setAssignee(c?.assignee ?? ""); }, [c?.id, c?.note, c?.assignee]);
   const done = () => queryClient.invalidateQueries();
   const create = useMutation({ mutationFn: () => api("/api/cases", { method: "POST", body: JSON.stringify({ contractId: d.id }) }), onSuccess: done });
@@ -145,9 +147,12 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
       </label>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => patch.mutate({ note, assignee })} disabled={!dirty || patch.isPending}>Lagre</Button>
-        <a className="inline-flex items-center rounded-md border border-line px-3 py-1.5 text-sm hover:bg-sunk"
-          href={`/api/cases/${c.id}/arbeidspapir`} target="_blank" rel="noreferrer">Arbeidspapir (utskrift/PDF)</a>
+        {STATIC
+          ? <Button variant="outline" onClick={() => saveWorkpaper(String(c.id)).catch((e) => setFileError(String(e.message)))}>Last ned arbeidspapir</Button>
+          : <a className="inline-flex items-center rounded-md border border-line px-3 py-1.5 text-sm hover:bg-sunk"
+            href={`/api/cases/${c.id}/arbeidspapir`} target="_blank" rel="noreferrer">Arbeidspapir (utskrift/PDF)</a>}
       </div>
+      {fileError && <p className="text-sm text-hi">{fileError}</p>}
       <details className="text-sm">
         <summary className="cursor-pointer text-xs text-muted">Logg ({c.events.length})</summary>
         <ul className="mt-2 space-y-1 text-xs">
@@ -180,9 +185,9 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         <h2 className="text-lg font-semibold leading-snug [overflow-wrap:anywhere]">{d.title}</h2>
         <p className="text-sm text-muted">{d.buyer} · {d.region} · {d.sector}</p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
+          {!STATIC && <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
-          </Button>
+          </Button>}
           {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i TED ↗</a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
@@ -251,6 +256,27 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <Row k="CPV" v={`${d.cpv ?? "–"} · ${d.nature ?? ""}`} />
         </dl>
       </Section>
+
+      {d.einnsyn != null && (
+        <Section title="Postjournal hos oppdragsgiveren (eInnsyn)">
+          {d.einnsyn.length === 0 ? (
+            <p className="text-sm text-muted">Ingen journalposter med leverandøren som avsender eller mottaker. Mange kommuner publiserer ikke i eInnsyn, så det betyr ikke at dokumentene mangler.</p>
+          ) : (
+            <ul className="divide-y divide-line rounded-md border border-line">
+              {d.einnsyn.map((j, i) => (
+                <li key={i} className="px-3 py-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    {j.url ? <a href={j.url} target="_blank" rel="noreferrer" className="min-w-0 truncate text-accent hover:underline">{j.title}</a>
+                      : <span className="min-w-0 truncate">{j.title}</span>}
+                    <span className="num shrink-0 text-xs text-muted">{j.date ? date(j.date) : ""}</span>
+                  </div>
+                  {j.case && <div className="truncate text-xs text-muted">Sak: {j.case}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
       {d.sameSupplier.length > 0 && (
         <Section title="Andre tildelinger, samme oppdragsgiver og leverandør">

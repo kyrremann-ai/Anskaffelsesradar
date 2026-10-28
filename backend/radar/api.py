@@ -22,7 +22,7 @@ from . import db, llm, pipeline
 from .config import settings
 from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
-from .ingest import doffin
+from .ingest import doffin, einnsyn
 from .ingest.brreg import BrregIndex
 from .scoring import FEATURES, FLAG_LABELS, contracts_frame, feature_frame, model_info
 
@@ -63,7 +63,8 @@ def frame() -> pd.DataFrame:
             df = df.merge(s, on="id", how="inner")
             df["flags"] = df["flags"].map(lambda x: json.loads(x or "[]"))
             df["flag_keys"] = df["flags"].map(lambda fl: {f["key"] for f in fl})
-        _cache.update(key=key, df=df, brreg=BrregIndex(con))
+        bi = BrregIndex(con)
+        _cache.update(key=key, df=df, brreg=bi, extra=ExtraIndex(con, bi.ent))
     df = _cache["df"]
     if df.empty:
         return df
@@ -75,6 +76,13 @@ def frame() -> pd.DataFrame:
 def brreg_index() -> BrregIndex:
     frame()
     return _cache["brreg"] or BrregIndex(con)
+
+
+def extra_index(bi: BrregIndex) -> ExtraIndex:
+    # Bygges én gang per datasett; å bygge den per leverandørkort er tregt med ekte data
+    if _cache.get("extra") is None or _cache.get("brreg") is not bi:
+        return ExtraIndex(con, bi.ent)
+    return _cache["extra"]
 
 
 def scope(df: pd.DataFrame, buyers: str | None) -> pd.DataFrame:
@@ -119,7 +127,7 @@ def health():
 def meta():
     return {"mode": db.get_meta(con, "mode", settings.mode), "updated_at": db.get_meta(con, "updated_at"),
             "refresh": pipeline.status, "llm": "mistral" if settings.mistral_api_key else "mal",
-            "doffin": bool(settings.doffin_api_key), "case_statuses": CASE_STATUSES,
+            "doffin": settings.doffin, "case_statuses": CASE_STATUSES,
             "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()},
             "sources": db.get_meta(con, "sources") or {}}
 
@@ -270,6 +278,7 @@ def contract_detail(cid: str):
     bi = brreg_index()
     out["suppliers"] = [_supplier_card(bi, o) for o in r.winner_ids]
     out["case"] = _case(cid)
+    out["einnsyn"] = einnsyn.for_contract(con, cid)
     out["assessments"] = [dict(a) for a in con.execute(
         "SELECT id, at, provider, model, text FROM assessments WHERE contract_id=? ORDER BY id DESC", (cid,))]
     return out
@@ -297,7 +306,7 @@ def _supplier_card(bi: BrregIndex, orgnr: str) -> dict:
     roles = [dict(r) for r in con.execute(
         "SELECT rolle, rolle_navn, type, navn, person_key FROM brreg_roles WHERE orgnr=? ORDER BY rolle", (orgnr,))]
     return {"orgnr": orgnr, "brreg": e, "roles": roles, "brreg_url": f"https://virksomhet.brreg.no/nb/oppslag/enheter/{orgnr}",
-            **ExtraIndex(con, bi.ent).supplier(orgnr)}
+            **extra_index(bi).supplier(orgnr)}
 
 
 @app.get("/api/suppliers")

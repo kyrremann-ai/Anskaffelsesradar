@@ -47,6 +47,18 @@ cd frontend && npm install && npm run dev # http://localhost:5173 (proxy til API
 
 Ekte data: `RADAR_MODE=live python -m radar.pipeline`. Første kjøring henter rundt 7 000 kunngjøringer fra TED og 5 500 orgnr fra Brreg, og tar 20–40 minutter. Etter det hentes bare nye.
 
+## Artifact-versjon (uten server)
+
+Klienten kan bygges som en artifact på claude.ai. Da regner nettleseren ut oversikt og filtre fra JSON-filer, og saker lagres i artifactens delte database.
+
+```bash
+RADAR_MODE=live deploy/build_artifact.sh ut/    # eller RADAR_DEMO=1 for demodata
+```
+
+Publiser `ut/index.html` med `contracts.json`, `cards.json` og `meta.json` som filer, og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
+
+Begrensninger: brukerne må ha tilgang via claude.ai, dataene lagres hos Anthropic, AI-vurdering og Doffin live er av, og arbeidspapir/CSV lastes ned som filer.
+
 ## Produksjon (Hetzner)
 
 ```bash

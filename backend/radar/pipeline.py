@@ -13,7 +13,7 @@ import traceback
 
 from . import db
 from .config import settings
-from .ingest import brreg, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .scoring import ModelBundle, kofa_training, score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
@@ -136,7 +136,11 @@ def run(con, demo: bool | None = None) -> None:
             rows = ted.refresh(con, settings.data_dir, settings.ted_from, log=_log)
             db.upsert_contracts(con, rows)
             _log(f"Lagret {len(rows)} nye kontrakter fra TED")
-            sources = live_sources(con)
+            doffin_src: dict = {}
+            if settings.doffin:
+                _source("Doffin", lambda: db.upsert_contracts(
+                    con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src)
+            sources = doffin_src | live_sources(con)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
         _log("Kjører modeller")
@@ -146,6 +150,9 @@ def run(con, demo: bool | None = None) -> None:
             _log(f"Trener på nytt med {len(real[1])} KOFA-merkede kontrakter")
             _bundle = ModelBundle(settings.seed, real)
         score_all(con, bundle(), log=_log)
+        if not demo and settings.einnsyn:
+            # Etter scoring, siden bare prioriterte kontrakter slås opp
+            _source("eInnsyn", lambda: einnsyn.refresh(con, log=_log), sources)
         with db.tx(con):
             db.set_meta(con, "sources", sources)
         with db.tx(con):
@@ -172,3 +179,5 @@ if __name__ == "__main__":
     ap.add_argument("--demo", action="store_true")
     a = ap.parse_args()
     run(db.connect(settings.db_path), demo=True if a.demo else None)
+    if status["error"]:
+        raise SystemExit(f"Oppdateringen feilet: {status['error']}")

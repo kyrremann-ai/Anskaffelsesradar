@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CaseFile } from "../components/CaseFile";
 import { Button, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
-import { qs, useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
+import { STATIC, qs, useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { date } from "../lib/format";
+import { exportCsv } from "../lib/static";
 import { useScope } from "../lib/scope";
 
 const PAGE = 40;
@@ -22,6 +23,7 @@ export default function Workbench() {
   const [q, setQ] = useState(get("q"));
   useEffect(() => { const t = setTimeout(() => q !== get("q") && set("q", q), 350); return () => clearTimeout(t); }, [q]); // eslint-disable-line
   const [limit, setLimit] = useState(PAGE);
+  const [exportError, setExportError] = useState("");
   const filters = { buyers, q: get("q"), tier: get("tier"), flag: get("flag"), method: get("method"), sector: get("sector"),
     case_status: get("sak"), supplier: get("supplier") };
   useEffect(() => setLimit(PAGE), [JSON.stringify(filters)]); // eslint-disable-line
@@ -35,8 +37,11 @@ export default function Workbench() {
     <div>
       <PageHead title="Arbeidsflate"
         desc="Kontraktene i dine enheter, sortert etter prioritet. Velg en kontrakt for å se hvorfor den er flagget, sette status og skrive notat."
-        right={<a className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunk"
-          href={`/api/contracts/export.csv${qs(filters)}`}>Eksporter CSV</a>} />
+        right={STATIC
+          ? <Button variant="outline" onClick={() => exportCsv(filters).catch((e) => setExportError(String(e.message)))}>Eksporter CSV</Button>
+          : <a className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunk"
+            href={`/api/contracts/export.csv${qs(filters)}`}>Eksporter CSV</a>} />
+      {exportError && <p className="-mt-2 mb-3 text-sm text-hi">{exportError}</p>}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Search value={q} onChange={setQ} placeholder="Søk tittel, oppdragsgiver, leverandør" />
         <Select label="Prioritet" value={get("tier")} onChange={(v) => set("tier", v)} placeholder="Alle prioriteter"

@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
-import { api, queryClient, useApi, type Meta } from "../lib/api";
+import logo from "../assets/logo.svg";
+import { STATIC, api, queryClient, useApi, type Meta } from "../lib/api";
 import { dateTime } from "../lib/format";
 import { useScope } from "../lib/scope";
 import { Button, cx } from "./ui";
@@ -13,7 +14,7 @@ const NAV = [
   { to: "/leverandorer", label: "Leverandører" },
   { to: "/doffin", label: "Doffin live" },
   { to: "/metode", label: "Modell og metode" },
-];
+].filter((n) => !(STATIC && n.to === "/doffin"));
 
 function ScopePicker() {
   const { buyers, setBuyers } = useScope();
@@ -95,13 +96,13 @@ function ThemeToggle() {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { data: meta } = useApi<Meta>("/api/meta", {}, { refetchInterval: 4000 });
+  const { data: meta } = useApi<Meta>("/api/meta", {}, { refetchInterval: STATIC ? false : 4000 });
   const [menu, setMenu] = useState(false);
   return (
     <div className="flex min-h-screen">
       <aside className={cx("fixed inset-y-0 left-0 z-40 w-60 flex-col bg-ink text-ink-fg md:flex", menu ? "flex" : "hidden")}>
         <div className="flex items-center gap-2.5 px-5 py-5">
-          <img src="/favicon.svg" alt="" className="h-7 w-7" />
+          <img src={logo} alt="" className="h-7 w-7" />
           <div>
             <div className="font-bold">Anskaffelsesradar</div>
             <div className="text-xs opacity-70">Prioritering for revisjon</div>
@@ -132,7 +133,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-xs text-muted lg:inline">Oppdatert {dateTime(meta?.updated_at)}</span>
-            <RefreshButton meta={meta} />
+            {!STATIC && <RefreshButton meta={meta} />}
             <ThemeToggle />
           </div>
         </header>

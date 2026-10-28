@@ -110,6 +110,9 @@ CREATE TABLE IF NOT EXISTS kofa_cases (
 CREATE TABLE IF NOT EXISTS kofa_matches (
     saksnr TEXT, contract_id TEXT, score REAL, PRIMARY KEY (saksnr, contract_id)
 );
+-- eInnsyn: oppdragsgivers enhet (tom streng = ikke i eInnsyn) og journalposter per kontrakt
+CREATE TABLE IF NOT EXISTS einnsyn_enhet (orgnr TEXT PRIMARY KEY, enhet_id TEXT);
+CREATE TABLE IF NOT EXISTS einnsyn (contract_id TEXT PRIMARY KEY, items TEXT, at TEXT);
 """
 
 

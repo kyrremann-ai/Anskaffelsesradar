@@ -108,3 +108,15 @@ def test_flags_from_all_sources(con):
 def test_no_flags_without_data(con):
     x = ExtraIndex(con, brreg.BrregIndex(con).ent)
     assert x.flags({"id": "C1", "buyer_id": BUYER, "winner_ids": [S1], "cpv": "90910000", "award_value": 8e5}, {S1, S2}) == []
+
+
+def test_einnsyn_parse_and_names():
+    from radar.ingest import einnsyn
+    assert einnsyn.core_name("Brøyt og Strø AS") == "Brøyt og Strø" and einnsyn.core_name("Statkraft ASA") == "Statkraft"
+    items = [{"entity": "Journalpost", "offentligTittel": "Habilitetsvurdering - Rammeavtale", "journaldato": "2026-10-12",
+              "journalposttype": "inngaaende_dokument", "externalId": "http://data.einnsyn.no/noark4/Journalpost--1",
+              "saksmappe": {"externalId": "http://data.einnsyn.no/noark4/Saksmappe--971278374--3859--2026", "offentligTittel": "Rammeavtale"}},
+             {"entity": "Moetemappe", "offentligTittel": "Ikke med"}]
+    out = einnsyn.parse_items(items)
+    assert len(out) == 1 and out[0]["case"] == "Rammeavtale" and out[0]["date"] == "2026-10-12"
+    assert out[0]["url"].startswith("https://einnsyn.no/saksmappe?id=http%3A%2F%2Fdata.einnsyn.no") and "&jid=" in out[0]["url"]

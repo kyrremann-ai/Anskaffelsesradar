@@ -1,8 +1,14 @@
 import { QueryClient, useQuery } from "@tanstack/react-query";
+import { onCasesChange, staticApi } from "./static";
+
+// Bygget som artifact (uten server): data fra JSON-filer, saker i artifactens database
+export const STATIC = import.meta.env.VITE_STATIC === "1";
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false, retry: 1 } },
 });
+// Andre brukeres endringer i saker kommer live fra databasen
+if (STATIC) onCasesChange(() => queryClient.invalidateQueries());
 
 export type Tier = "Høy" | "Forhøyet" | "Lav";
 export type Flag = { key: string; label: string; weight: number; source: string; why?: string };
@@ -46,7 +52,10 @@ export type ContractDetail = ContractRow & {
   ml_lr: number; ml_rf: number; ml_gb: number; drivers: { feature: string; effect: number }[];
   sameSupplier: { id: string; title: string; pub_date: string; tier: Tier }[];
   suppliers: SupplierCard[]; case: Case | null; assessments: Assessment[];
+  // null = ikke slått opp (bare høy/forhøyet prioritet slås opp)
+  einnsyn?: JournalPost[] | null;
 };
+export type JournalPost = { title: string | null; date: string | null; type: string | null; case: string | null; url: string | null };
 
 export type Stats = {
   n: number; n_high: number; n_elevated: number; single_bid_pct: number | null; direct_pct: number | null;
@@ -76,6 +85,7 @@ export function qs(params: Record<string, unknown>): string {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  if (STATIC) return staticApi(path, init) as Promise<T>;
   const r = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
