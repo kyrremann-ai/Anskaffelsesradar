@@ -96,8 +96,11 @@ export default function Workbench() {
                           {r.klagerisiko != null && r.klagerisiko >= 80 && (
                             <span className="rounded border border-line px-1.5 py-0.5 text-xs text-muted" title="Klagerisiko (eksperimentell): persentil blant kontraktene i radaren, ikke en sannsynlighet. Teller ikke i prioriteten.">
                               Klagerisiko p{Math.round(r.klagerisiko)}</span>)}
-                          {r.flags.slice(0, 2).map((f) => <span key={f.key} className="truncate rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">{f.label}</span>)}
-                          {r.flags.length > 2 && <span className="text-xs text-muted">+{r.flags.length - 2}</span>}
+                          {(() => {
+                            const shown = r.flags.filter((f) => !(r.regler ?? []).some((x) => x.label === f.label));
+                            return <>{shown.slice(0, 2).map((f) => <span key={f.key} className="truncate rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">{f.label}</span>)}
+                              {shown.length > 2 && <span className="text-xs text-muted">+{shown.length - 2}</span>}</>;
+                          })()}
                         </span>
                       </span>
                     </button>

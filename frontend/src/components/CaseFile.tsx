@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { saveWorkpaper } from "../lib/static";
-import { date, dateTime, int, nok, pct, signedPct } from "../lib/format";
+import { date, dateTime, int, isoDatesInText, nok, pct, signedPct } from "../lib/format";
 import { Button, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
 
 function Md({ text }: { text: string }) {
@@ -67,7 +67,7 @@ function FlagList({ flags }: { flags: Flag[] }) {
                     {!dq && <span className="num shrink-0 text-xs text-muted" title={`Vekt ${f.weight.toLocaleString("nb-NO")}`}>
                       {f.bidrag != null ? `+${f.bidrag.toLocaleString("nb-NO")} poeng` : `vekt ${f.weight.toLocaleString("nb-NO")}`}</span>}
                   </div>
-                  {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{f.why}</div>}
+                  {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{isoDatesInText(f.why)}</div>}
                   {f.data_note && <div className="mt-0.5 pl-5 text-xs text-mid">{f.data_note}</div>}
                   {f.checks?.length ? <Checks checks={f.checks} /> : null}
                 </li>
@@ -246,7 +246,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <h3 className="text-sm font-medium">Faste kontrollpunkter</h3>
           <p className="text-xs text-muted">Slår ut uansett hvordan resten av datasettet ser ut. Må kontrolleres mot originalkunngjøringen.</p>
           <ul className="mt-2 space-y-1 text-sm">{d.regler.map((x) => (
-            <li key={x.key}><span className="text-hi">◆</span> {x.label}{x.why && <span className="block pl-4 text-xs text-muted">{x.why}</span>}</li>))}
+            <li key={x.key}><span className="text-hi">◆</span> {x.label}{x.why && <span className="block pl-4 text-xs text-muted">{isoDatesInText(x.why)}</span>}</li>))}
           </ul>
         </section>)}
 

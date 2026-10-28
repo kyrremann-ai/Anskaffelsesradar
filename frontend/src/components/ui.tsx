@@ -96,7 +96,7 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="p-8 text-center text-sm text-muted">{children}</div>;
+  return <div className="mx-auto max-w-2xl p-8 text-center text-sm text-muted">{children}</div>;
 }
 
 export function Select({ value, onChange, items, placeholder, label }: {

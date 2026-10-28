@@ -27,12 +27,12 @@ export default function Invoices() {
             <table className="w-full min-w-[860px] text-sm">
               <thead className="bg-sunk text-left text-xs text-muted">
                 <tr>{["Leverandør", "Fakturaer", "Sum", "Høyeste 12 mnd", "Kunngjorte kontrakter", "Kontrollpunkter"].map((h, i) =>
-                  <th key={h} className={cx("whitespace-nowrap px-3 py-2.5 font-medium", i > 0 && i < 4 && "text-right")}>{h}</th>)}</tr>
+                  <th key={h} className={cx("whitespace-nowrap px-3 py-2.5 font-medium", i > 0 && i < 4 && "text-right", i === 0 && "sticky left-0 z-10 bg-sunk")}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {data.rows.map((r) => (
-                  <tr key={`${r.buyer_id}-${r.orgnr}`} className="border-t border-line align-top hover:bg-sunk">
-                    <td className="px-3 py-2">
+                  <tr key={`${r.buyer_id}-${r.orgnr}`} className="group border-t border-line align-top hover:bg-sunk">
+                    <td className="sticky left-0 z-10 max-w-[45vw] bg-surface px-3 py-2 group-hover:bg-sunk sm:max-w-none">
                       <Link to={`/leverandorer/${r.orgnr}`} className="font-medium hover:underline">{r.name ?? r.orgnr}</Link>
                       <span className="block text-xs text-muted">{r.orgnr}{r.public && " · offentlig enhet"} · {r.accounts.map((a) => a.account).join(", ")}</span>
                     </td>
