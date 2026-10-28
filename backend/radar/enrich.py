@@ -10,19 +10,19 @@ from .ingest.registers import CPV_PREFIX
 
 # Oversikt over flaggene herfra (nøkkel -> etikett, vekt, kilde). Vises på metodesiden.
 FLAGS = {
-    "rs_big_share": ("Kontrakten er over halve omsetningen", 1.0, "Regnskapsregisteret"),
+    "rs_big_share": ("Kontraktsverdi over halve årsomsetningen", 1.0, "Regnskapsregisteret"),
     "rs_neg_equity": ("Negativ egenkapital", 0.8, "Regnskapsregisteret"),
     "rs_missing": ("Ingen årsregnskap registrert", 0.6, "Regnskapsregisteret"),
-    "own_shared_suppliers": ("Felles eier med konkurrerende leverandør", 1.2, "Aksjonærregisteret / Proff"),
-    "own_buyer_person": ("Eier har rolle hos oppdragsgiver", 2.0, "Aksjonærregisteret + Brreg"),
-    "own_buyer_owns": ("Oppdragsgiver eier leverandøren", 0.3, "Aksjonærregisteret"),
+    "own_shared_suppliers": ("Felles eier med annen leverandør hos samme oppdragsgiver", 1.2, "Aksjonærregisteret / Proff"),
+    "own_buyer_person": ("Navnetreff: eier har rolle hos oppdragsgiver", 2.0, "Aksjonærregisteret + Brreg"),
+    "own_buyer_owns": ("Oppdragsgiver registrert som eier av leverandøren", 0.3, "Aksjonærregisteret"),
     "pol_link": ("Ubekreftet navnetreff mot lokalpolitiker", 1.5, "Kandidatlister (0,8 hvis ikke valgt)"),
-    "sanc_org": ("Leverandør på sanksjons-/risikoliste", 2.0, "OpenSanctions (0,8 uten sanksjon)"),
-    "sanc_person": ("Rolleinnehaver/eier sanksjonert", 2.0, "OpenSanctions"),
-    "pep_person": ("Rolleinnehaver/eier er PEP", 0.8, "OpenSanctions"),
-    "reg_renhold": ("Ikke godkjent i renholdsregisteret", 1.2, "Arbeidstilsynet"),
-    "reg_bemanning": ("Ikke godkjent i bemanningsregisteret", 1.2, "Arbeidstilsynet"),
-    "kofa_brudd": ("KOFA har konstatert brudd", 1.0, "KOFA (1,5 ved ulovlig direkte anskaffelse)"),
+    "sanc_org": ("Treff på sanksjonsliste (OpenSanctions)", 2.0, "OpenSanctions (0,8 uten sanksjon)"),
+    "sanc_person": ("Navnetreff: rolleinnehaver/eier på sanksjonsliste", 2.0, "OpenSanctions"),
+    "pep_person": ("Navnetreff: rolleinnehaver/eier på PEP-liste", 0.8, "OpenSanctions"),
+    "reg_renhold": ("Ikke registrert som godkjent i renholdsregisteret", 1.2, "Arbeidstilsynet"),
+    "reg_bemanning": ("Ikke registrert som godkjent i bemanningsregisteret", 1.2, "Arbeidstilsynet"),
+    "kofa_brudd": ("KOFA har konstatert brudd i saken", 1.0, "KOFA (1,5 ved ulovlig direkte anskaffelse)"),
 }
 
 # Godkjent-status i Arbeidstilsynets registre
@@ -107,7 +107,7 @@ class ExtraIndex:
             rs = self.regnskap.get(sid)
             if rs and rs.get("driftsinntekter"):
                 if value and value > 0.5 * rs["driftsinntekter"]:
-                    add("rs_big_share", "Kontrakten er over halve omsetningen", 1.0,
+                    add("rs_big_share", "Kontraktsverdi over halve årsomsetningen", 1.0,
                         f"{value / rs['driftsinntekter']:.0%} av driftsinntekter {rs['aar']}", "regnskap")
             if rs and rs.get("egenkapital") is not None and rs["egenkapital"] < 0:
                 add("rs_neg_equity", "Negativ egenkapital", 0.8, f"Egenkapital {rs['egenkapital']:,.0f} kr ({rs['aar']})".replace(",", " "), "regnskap")
@@ -119,14 +119,14 @@ class ExtraIndex:
             mine = self._owner_keys(sid)
             linked = sorted(o for o in other_suppliers - {sid} if mine & self._owner_keys(o))
             if linked:
-                add("own_shared_suppliers", "Felles eier med konkurrerende leverandør", 1.2,
+                add("own_shared_suppliers", "Felles eier med annen leverandør hos samme oppdragsgiver", 1.2,
                     ", ".join(self._name(o) for o in linked[:3]), "eiere")
             if mine and buyer and buyer in mine:
-                add("own_buyer_owns", "Oppdragsgiver eier leverandøren", 0.3, "Kan være lovlig egenregi (sjekk unntak)", "eiere")
+                add("own_buyer_owns", "Oppdragsgiver registrert som eier av leverandøren", 0.3, "Kan være lovlig egenregi (sjekk unntak)", "eiere")
             owner_people = {(norm_name(o["owner_name"]), o["owner_birth_year"]) for o in self.owners.get(sid, {}).values()
                             if not o["owner_orgnr"] and o["owner_birth_year"]}
             if hit := owner_people & buyer_people:
-                add("own_buyer_person", "Eier har rolle hos oppdragsgiver", 2.0, f"{len(hit)} person(er), navn + fødselsår", "eiere")
+                add("own_buyer_person", "Navnetreff: eier har rolle hos oppdragsgiver", 2.0, f"{len(hit)} person(er), navn + fødselsår", "eiere")
 
             # Kandidatlister
             pols = [p for person in self._persons(sid) for p in self.politicians.get(person, [])
@@ -139,12 +139,12 @@ class ExtraIndex:
 
             # Sanksjoner og PEP
             if hit := self.sanc_org.get(sid):
-                add("sanc_org", "Leverandør på sanksjons-/risikoliste" if hit["is_sanction"] else "Leverandør i OpenSanctions",
+                add("sanc_org", "Treff på sanksjonsliste (OpenSanctions)" if hit["is_sanction"] else "Treff i OpenSanctions (ikke sanksjon)",
                     2.0 if hit["is_sanction"] else 0.8, hit["datasets"][:80], "opensanctions")
             for person in self._persons(sid):
                 if hit := self.sanc_person.get(person):
                     add("sanc_person" if hit["is_sanction"] else "pep_person",
-                        "Rolleinnehaver/eier sanksjonert" if hit["is_sanction"] else "Rolleinnehaver/eier er PEP",
+                        "Navnetreff: rolleinnehaver/eier på sanksjonsliste" if hit["is_sanction"] else "Navnetreff: rolleinnehaver/eier på PEP-liste",
                         2.0 if hit["is_sanction"] else 0.8, hit["datasets"][:80], "opensanctions")
 
             # Godkjenningsregistre
@@ -152,13 +152,13 @@ class ExtraIndex:
                 if reg in self.registers and cpv.startswith(prefixes):
                     st = self.registers[reg].get(sid)
                     if not _ok_status(st or ""):
-                        add(f"reg_{reg}", f"Ikke godkjent i {reg}sregisteret", 1.2,
+                        add(f"reg_{reg}", f"Ikke registrert som godkjent i {reg}sregisteret", 1.2,
                             f"Status: {st}" if st else "Finnes ikke i registeret", "arbeidstilsynet")
 
         # KOFA
         for k in self.kofa.get(c.get("id"), []):
             if k["brudd"]:
-                add("kofa_brudd", "KOFA har konstatert brudd", 1.5 if k["ulovlig_direkte"] else 1.0,
+                add("kofa_brudd", "KOFA har konstatert brudd i saken", 1.5 if k["ulovlig_direkte"] else 1.0,
                     f"Sak {k['saksnr']} ({k['dato']})", "kofa")
         return out
 

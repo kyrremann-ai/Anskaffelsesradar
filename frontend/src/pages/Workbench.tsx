@@ -83,8 +83,8 @@ export default function Workbench() {
                           <TierBadge tier={r.tier} />
                           {r.case_status && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-xs text-accent">{r.case_status}</span>}
                           {r.klagerisiko != null && r.klagerisiko >= 80 && (
-                            <span className="rounded border border-line px-1.5 py-0.5 text-xs text-muted" title="Klagerisiko (eksperimentell): persentil for sannsynlighet for KOFA-klage. Teller ikke i prioriteten.">
-                              Klagerisiko {Math.round(r.klagerisiko)}</span>)}
+                            <span className="rounded border border-line px-1.5 py-0.5 text-xs text-muted" title="Klagerisiko (eksperimentell): persentil blant kontraktene i radaren, ikke en sannsynlighet. Teller ikke i prioriteten.">
+                              Klagerisiko p{Math.round(r.klagerisiko)}</span>)}
                           {r.flags.slice(0, 2).map((f) => <span key={f.key} className="truncate rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">{f.label}</span>)}
                           {r.flags.length > 2 && <span className="text-xs text-muted">+{r.flags.length - 2}</span>}
                         </span>

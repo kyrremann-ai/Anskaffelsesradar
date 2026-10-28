@@ -54,8 +54,11 @@ const TIER = {
   "Høy": "bg-hi-soft text-hi", "Forhøyet": "bg-mid-soft text-mid", "Lav": "bg-lo-soft text-lo",
 } as const;
 
+// Prioritet er rangering, ikke sannsynlighet: også et datasett uten problemer har en topp 5 %
+export const TIER_HELP = "Relativ rangering, ikke sannsynlighet for regelbrudd. Høy = topp 5 % nasjonalt etter summen av observasjonene, forhøyet = persentil 80–95.";
+
 export function TierBadge({ tier }: { tier: Tier }) {
-  return <span className={cx("inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", TIER[tier])}>{tier} prioritet</span>;
+  return <span title={TIER_HELP} className={cx("inline-block whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium", TIER[tier])}>{tier} prioritet</span>;
 }
 
 export function scoreColor(v: number) {

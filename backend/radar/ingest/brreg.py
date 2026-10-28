@@ -211,8 +211,8 @@ class BrregIndex:
     def flags(self, c: dict, other_suppliers: set[str]) -> list[dict]:
         out: list[dict] = []
 
-        def add(key, label, weight, why):
-            out.append({"key": key, "label": label, "weight": weight, "source": "brreg", "why": why})
+        def add(key, label, weight, why, source="brreg"):
+            out.append({"key": key, "label": label, "weight": weight, "source": source, "why": why})
 
         award = _d(c.get("pub_date"))
         value = c.get("award_value") or c.get("est_value")
@@ -223,35 +223,38 @@ class BrregIndex:
             s = self.ent.get(sid)
             if not s:
                 continue
-            if s["kind"] in ("slettet", "ukjent") or s["slettedato"]:
-                add("brreg_deleted", "Leverandør slettet/ukjent i Brreg", 1.5, s["slettedato"] or "Finnes ikke i Enhetsregisteret")
+            if s["kind"] == "slettet" or s["slettedato"]:
+                add("brreg_deleted", "Slettet enhet", 1.5, f"Slettet {s['slettedato']}" if s["slettedato"] else "Slettet i Enhetsregisteret")
+            elif s["kind"] == "ukjent":
+                # Kan like gjerne være feil orgnr i kunngjøringen som en egenskap ved leverandøren: teller ikke
+                add("brreg_missing", "Registertreff mangler", 0.0, "Orgnr fra kunngjøringen finnes ikke i Enhetsregisteret", "datakvalitet")
             if s["konkurs"]:
-                add("brreg_bankrupt", "Leverandør under konkurs", 1.5, "Konkursbehandling registrert")
+                add("brreg_bankrupt", "Konkursbehandling registrert", 1.5, "Registrert i Konkursregisteret")
             if s["under_avvikling"] or s["tvangsavvikling"]:
-                add("brreg_dissolving", "Leverandør under avvikling", 1.0, "Under (tvangs)avvikling")
+                add("brreg_dissolving", "Avvikling registrert", 1.0, "Under avvikling eller tvangsavvikling i Enhetsregisteret")
             reg = _d(s["stiftet"])
             if reg and award:
                 age = (award - reg).days
                 if age < 0:
-                    add("brreg_after_award", "Leverandør stiftet etter kunngjøring", 1.5, f"Stiftet {reg}")
+                    add("brreg_after_award", "Stiftelsesdato etter kunngjøringsdato", 1.5, f"Stiftet {reg}")
                 elif age < 365:
-                    add("brreg_new", "Nyetablert leverandør (<12 mnd)", 1.0, f"{age} dager gammel")
+                    add("brreg_new", "Stiftet under 12 måneder før kunngjøring", 1.0, f"{age} dager gammel")
             if s["mva"] is False and s["orgform"] not in PUBLIC_FORMS:
-                add("brreg_no_vat", "Leverandør ikke MVA-registrert", 1.0, "Ikke i MVA-registeret")
+                add("brreg_no_vat", "Ikke registrert i Merverdiavgiftsregisteret", 1.0, "Ikke i MVA-registeret")
             if s["ansatte"] in (None, 0) and value and value >= 2_000_000:
-                add("brreg_no_staff", "Leverandør uten ansatte", 0.6, f"0/ukjent ansatte, kontrakt {value:,.0f} kr".replace(",", " "))
+                add("brreg_no_staff", "Ingen ansatte registrert", 0.6, f"0/ukjent ansatte, kontrakt {value:,.0f} kr".replace(",", " "))
             if sid in self.dead:
-                add("brreg_dead_role", "Død rolleinnehaver registrert", 0.4, "Registeret er ikke oppdatert")
+                add("brreg_dead_role", "Rolleinnehaver registrert som død", 0.4, "Registeret er ikke oppdatert")
             exp = CPV_TO_NACE.get(str(c.get("cpv") or "")[:2])
             if exp and s["nace_seksjon"] and s["nace_seksjon"] not in exp:
-                add("brreg_nace", "Bransje passer ikke med kjøpet", 0.5,
+                add("brreg_nace", "Mulig avvik mellom registrert bransje og anskaffelseskategori", 0.5,
                     f"CPV {str(c.get('cpv'))[:2]} mot NACE {s['nace']} {s['nace_tekst'] or ''}".strip())
             sp = self.people.get(sid, set())
             if shared := sp & bp:
                 add("brreg_shared_buyer", "Felles rolleinnehaver med oppdragsgiver", 2.0, f"{len(shared)} person(er)")
             linked = sorted(o for o in other_suppliers - {sid} if sp & self.people.get(o, set()))
             if linked:
-                add("brreg_shared_suppliers", "Felles roller med konkurrerende leverandør", 1.2,
+                add("brreg_shared_suppliers", "Felles rolleinnehaver med annen leverandør hos samme oppdragsgiver", 1.2,
                     ", ".join(self.ent.get(o, {}).get("navn") or o for o in linked[:3]))
             if s["adresse_key"]:
                 co = (self.by_addr.get(s["adresse_key"], set()) & other_suppliers) - {sid}

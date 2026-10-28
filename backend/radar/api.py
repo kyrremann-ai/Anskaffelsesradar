@@ -248,9 +248,12 @@ def export(buyers: str | None = None, q: str = "", tier: str = "", method: str =
     out = df.assign(flagg=df["flags"].map(lambda fl: "; ".join(f["label"] for f in fl)),
                     leverandor=df.winner_names.map("; ".join))
     cols = ["id", "pub_date", "title", "buyer", "leverandor", "method", "num_bidders", "est_value", "award_value",
-            "award_over_estimate_pct", "priority", "tier", "cri", "klagerisiko", "flagg", "case_status", "url"]
+            "award_over_estimate_pct", "priority", "percentile", "tier", "cri", "klagerisiko", "flagg", "case_status", "url"]
+    # Kolonnenavnene sier at prioritet og klagerisiko er rangeringer, ikke sannsynligheter
+    head = {"priority": "prioritet_poeng", "percentile": "prioritet_persentil_nasjonalt", "tier": "prioritetsnivå_relativt",
+            "klagerisiko": "klagerisiko_persentil", "flagg": "observasjoner"}
     buf = io.StringIO()
-    out.sort_values("priority", ascending=False)[cols].to_csv(buf, index=False, sep=";", decimal=",")
+    out.sort_values("priority", ascending=False)[cols].rename(columns=head).to_csv(buf, index=False, sep=";", decimal=",")
     return StreamingResponse(iter(["﻿" + buf.getvalue()]), media_type="text/csv",
                              headers={"Content-Disposition": "attachment; filename=anskaffelsesradar.csv"})
 
@@ -501,13 +504,13 @@ pre{{white-space:pre-wrap;background:#f5f5f5;padding:8px}}small{{color:#666}}</s
 <h1>Arbeidspapir: {e(d['title'] or '')}</h1>
 <p><b>Oppdragsgiver:</b> {e(d['buyer'] or '')} &nbsp; <b>Kunngjøring:</b> {e(d['id'])} ({e(d['pub_date'] or '')})<br>
 <b>Status:</b> {e(c['status'])} &nbsp; <b>Ansvarlig:</b> {e(c['assignee'] or '–')} &nbsp; <b>Utskrevet:</b> {db.now()}</p>
-<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}) – røde flagg (CRI) {fmt(d['cri'])}. Klagerisiko (eksperimentell, teller ikke) {fmt(d['klagerisiko'])}.
-Prioriteten sier hva som bør sjekkes først. Den er ikke bevis for misligheter.</p>
+<p><b>Prioritet:</b> {fmt(d['priority'])} ({e(d['tier'])}, persentil {fmt(d['percentile'])} nasjonalt) – røde flagg (CRI) {fmt(d['cri'])}. Klagerisiko-persentil (eksperimentell, teller ikke) {fmt(d['klagerisiko'])}.
+Prioriteten er en relativ rangering, ikke en sannsynlighet for regelbrudd. Den sier hva som bør sjekkes først, ikke at noe er galt.</p>
 <h2>Nøkkeldata</h2><table>
 <tr><th>Prosedyre</th><td>{e(d['method'] or '')}</td></tr><tr><th>Antall tilbud</th><td>{fmt(d['num_bidders'])}</td></tr>
 <tr><th>Estimert verdi</th><td>{fmt(d['est_value'])}</td></tr><tr><th>Tildelt verdi</th><td>{fmt(d['award_value'])}</td></tr>
 <tr><th>Leverandør(er)</th><td>{e(', '.join(d['winner_names'] or []))}</td></tr><tr><th>Kilde</th><td>{e(d['url'] or d['source'])}</td></tr></table>
-<h2>Røde flagg</h2><ul>{flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>{sup or '<li>–</li>'}</ul>
+<h2>Observasjoner (flagg)</h2><ul>{flags}</ul><h2>Leverandør (Brønnøysundregistrene)</h2><ul>{sup or '<li>–</li>'}</ul>
 <h2>Notat</h2><pre>{e(c['note'] or '')}</pre>{ai}
 <h2>Logg</h2><table><tr><th>Tid</th><th>Hvem</th><th>Felt</th><th>Fra</th><th>Til</th></tr>{events}</table></html>"""
     return HTMLResponse(body)
