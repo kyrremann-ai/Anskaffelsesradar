@@ -13,7 +13,7 @@ import traceback
 
 from . import db
 from .config import settings
-from .ingest import brreg, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, doffin, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .scoring import ModelBundle, kofa_training, score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
@@ -136,7 +136,11 @@ def run(con, demo: bool | None = None) -> None:
             rows = ted.refresh(con, settings.data_dir, settings.ted_from, log=_log)
             db.upsert_contracts(con, rows)
             _log(f"Lagret {len(rows)} nye kontrakter fra TED")
-            sources = live_sources(con)
+            doffin_src: dict = {}
+            if settings.doffin_api_key:
+                _source("Doffin", lambda: db.upsert_contracts(
+                    con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src)
+            sources = doffin_src | live_sources(con)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
         _log("Kjører modeller")

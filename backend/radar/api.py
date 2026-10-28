@@ -63,7 +63,8 @@ def frame() -> pd.DataFrame:
             df = df.merge(s, on="id", how="inner")
             df["flags"] = df["flags"].map(lambda x: json.loads(x or "[]"))
             df["flag_keys"] = df["flags"].map(lambda fl: {f["key"] for f in fl})
-        _cache.update(key=key, df=df, brreg=BrregIndex(con))
+        bi = BrregIndex(con)
+        _cache.update(key=key, df=df, brreg=bi, extra=ExtraIndex(con, bi.ent))
     df = _cache["df"]
     if df.empty:
         return df
@@ -75,6 +76,13 @@ def frame() -> pd.DataFrame:
 def brreg_index() -> BrregIndex:
     frame()
     return _cache["brreg"] or BrregIndex(con)
+
+
+def extra_index(bi: BrregIndex) -> ExtraIndex:
+    # Bygges én gang per datasett; å bygge den per leverandørkort er tregt med ekte data
+    if _cache.get("extra") is None or _cache.get("brreg") is not bi:
+        return ExtraIndex(con, bi.ent)
+    return _cache["extra"]
 
 
 def scope(df: pd.DataFrame, buyers: str | None) -> pd.DataFrame:
@@ -297,7 +305,7 @@ def _supplier_card(bi: BrregIndex, orgnr: str) -> dict:
     roles = [dict(r) for r in con.execute(
         "SELECT rolle, rolle_navn, type, navn, person_key FROM brreg_roles WHERE orgnr=? ORDER BY rolle", (orgnr,))]
     return {"orgnr": orgnr, "brreg": e, "roles": roles, "brreg_url": f"https://virksomhet.brreg.no/nb/oppslag/enheter/{orgnr}",
-            **ExtraIndex(con, bi.ent).supplier(orgnr)}
+            **extra_index(bi).supplier(orgnr)}
 
 
 @app.get("/api/suppliers")

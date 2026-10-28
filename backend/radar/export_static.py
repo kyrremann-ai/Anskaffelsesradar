@@ -20,6 +20,19 @@ FULL = ["url", "cpv", "nature", "accelerated", "justification", "tender_duration
         "repeat_pair_count", "prev_contract", "winner_market_share_pct", "ml_lr", "ml_rf", "ml_gb"]
 
 
+def _clean(v):
+    """NaN/inf er ikke gyldig JSON og stopper klienten. Ødelagte tegn avvises av artifacten."""
+    if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
+        return None
+    if isinstance(v, str):
+        return v.replace("\ufffd", "?")  # tegn TED ikke klarte å kode
+    if isinstance(v, dict):
+        return {k: _clean(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_clean(x) for x in v]
+    return v
+
+
 def export(out: Path, log=print) -> dict[str, int]:
     out.mkdir(parents=True, exist_ok=True)
     df = api.frame()
@@ -30,7 +43,7 @@ def export(out: Path, log=print) -> dict[str, int]:
         o = api.row_out(r, full=True)
         o.pop("case_id", None)
         o.pop("case_status", None)
-        o["winner"] = r.winner
+        o["winner"] = r.winner if isinstance(r.winner, str) else None
         o["drivers"] = bundle.drivers(X.loc[i])
         rows.append(o)
     bi = api.brreg_index()
@@ -58,7 +71,7 @@ def export(out: Path, log=print) -> dict[str, int]:
     }
     sizes = {}
     for name, data in files.items():
-        s = json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=lambda v: None if pd.isna(v) else str(v))
+        s = json.dumps(_clean(data), ensure_ascii=False, allow_nan=False, separators=(",", ":"), default=lambda v: None if pd.isna(v) else str(v))
         (out / name).write_text(s, encoding="utf-8")
         sizes[name] = len(s)
     log(f"Eksporterte {len(rows)} kontrakter og {len(cards)} virksomheter til {out}")
