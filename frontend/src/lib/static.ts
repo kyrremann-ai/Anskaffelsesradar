@@ -63,16 +63,19 @@ async function assess(r: Row, system?: string) {
     throw new HttpError(`AI-vurdering feilet: ${e?.message ?? e}`);
   }
   const a = { at: new Date().toISOString(), provider: "claude", model: res.modelApplied ?? AI_MODEL, text: res.text, ...(await actor()) };
+  // Huskes lokalt uansett, i tilfelle databasen ikke tar imot vurderinger (f.eks. Cloudflare-versjonen)
+  localAssessments.set(keyOf(r.id), a);
   const d = await db();
-  if (d) await d.doc(`assessments/${keyOf(r.id)}`).set(a).catch(() => null);
-  else localAssessments.set(keyOf(r.id), a);
+  try { await d?.doc(`assessments/${keyOf(r.id)}`).set(a); } catch { /* lokalt holder */ }
   return a;
 }
 
 const localAssessments = new Map<string, any>();
 async function assessments(key: string) {
   const d = await db();
-  const a = d ? await d.doc(`assessments/${key}`).get().then((s: any) => (s.exists ? s.data() : null)).catch(() => null) : localAssessments.get(key);
+  let a = null;
+  try { a = d ? await d.doc(`assessments/${key}`).get().then((s: any) => (s.exists ? s.data() : null)) : null; } catch { /* ingen get() */ }
+  a ??= localAssessments.get(key);
   return a ? [{ id: 1, ...a }] : [];
 }
 
