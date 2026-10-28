@@ -13,7 +13,8 @@ if (STATIC) onCasesChange(() => queryClient.invalidateQueries());
 export type Tier = "Høy" | "Forhøyet" | "Lav" | "Intensjon";
 // Faste kontrollpunkter: slår ut uansett hvordan resten av datasettet ser ut
 export type Check = { key: string; label: string; why?: string };
-export type Flag = { key: string; label: string; weight: number; source: string; why?: string };
+// bidrag = prioritetspoeng flagget gir (summen av bidragene er prioriteten)
+export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number };
 
 export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;
@@ -22,6 +23,8 @@ export type ContractRow = {
   cri: number; klagerisiko: number | null; winner_names: string[]; winner_ids: string[]; flags: Flag[]; data_coverage: number;
   framework: number; case_status: string | null; source: string;
   notice_type: "tildeling" | "intensjon"; regler: Check[];
+  // Rangering innen oppdragsgivertype × sektor
+  peer_group: string | null; peer_percentile: number | null; peer_tier: Tier;
 };
 // Hva én rad er, og hvor mange kunngjøringer som er slått sammen (fra observasjon.link)
 export type Observasjonsenhet = {

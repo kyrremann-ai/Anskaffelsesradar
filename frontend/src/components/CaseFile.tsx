@@ -64,7 +64,8 @@ function FlagList({ flags }: { flags: Flag[] }) {
                 <li key={f.key} className={cx("rounded-md border px-3 py-2 text-sm", dq ? "border-dashed border-line text-muted" : "border-line")}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-2"><span className={dq ? "text-muted" : "text-mid"} aria-hidden>{dq ? "○" : "▲"}</span>{f.label}</span>
-                    {!dq && <span className="num shrink-0 text-xs text-muted">vekt {f.weight.toLocaleString("nb-NO")}</span>}
+                    {!dq && <span className="num shrink-0 text-xs text-muted" title={`Vekt ${f.weight.toLocaleString("nb-NO")}`}>
+                      {f.bidrag != null ? `+${f.bidrag.toLocaleString("nb-NO")} poeng` : `vekt ${f.weight.toLocaleString("nb-NO")}`}</span>}
                   </div>
                   {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{f.why}</div>}
                 </li>
@@ -232,7 +233,14 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           <Meter value={d.priority} className="my-1.5" />
           <p className="text-xs text-muted">{d.tier === "Intensjon"
             ? "Intensjonskunngjøringer er ikke kontrakter og rangeres ikke. Poengsummen viser bare hvilke observasjoner som slår ut."
-            : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt.</p>
+            : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt
+            {d.data_coverage < 4 && <> (mangler {[d.num_bidders == null && "tilbudstall", d.est_value == null && "estimert verdi",
+              d.award_value == null && "tildelt verdi", d.contract_months == null && "varighet"].filter(Boolean).join(", ")})</>}.
+            {" "}Flagg som ikke kan vurderes uten disse feltene, slår ikke ut.</p>
+          {d.peer_group && d.peer_percentile != null && (
+            <p className="mt-1 text-xs text-muted" title="Samme poengsum rangert bare mot kontrakter fra samme type oppdragsgiver og sektor">
+              Innen sammenligningsgruppen <b className="font-medium">{d.peer_group}</b>: {d.peer_tier.toLowerCase()} prioritet,
+              blant de {pct(Math.max(0.1, 100 - d.peer_percentile))} høyeste.</p>)}
         </div>
         {d.klagerisiko != null && (
           <p className="col-span-2 text-xs text-muted">

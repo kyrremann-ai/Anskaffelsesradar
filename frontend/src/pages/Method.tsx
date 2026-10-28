@@ -86,6 +86,9 @@ export default function Method() {
             <li><b>CRI</b> (0–100): sum av vektene for utløste røde flagg fra kunngjøringen, delt på maks mulig sum.</li>
             <li><b>Register-tillegg</b>: {w?.brreg_per_weight ?? 8} poeng per vektpoeng i flaggene fra Brreg og tilleggskildene, maks {w?.brreg_cap ?? 20}.</li>
             <li>Ved lik poengsum kommer større kontrakter først.</li>
+            <li><b>Sammenligningsgruppe:</b> samme poengsum rangeres også innen oppdragsgivertype × sektor (for eksempel «Helseforetak × Helse»).
+              Oppdragsgivertypen tas fra organisasjonsformen i Brreg. Grupper med under 30 kontrakter bruker bare oppdragsgivertypen.
+              Velg «Innen sammenligningsgruppe» i arbeidsflaten. Hvert flagg viser hvor mange poeng det bidrar med.</li>
           </ol>
           <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = (CRI + register) / 1,2</p>
           <p className="mt-2 text-sm text-muted">Maskinlæringsmodellene fra eksamensrapporten (trent på syntetiske data) er fjernet fordi de ikke traff bedre enn tilfeldig på ekte KOFA-saker. Revisorenes vurderinger i saksmappen samles inn som fasit for nye modeller.</p>
