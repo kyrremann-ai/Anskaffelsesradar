@@ -1,9 +1,8 @@
-"""Røde flagg (CRI), tre ML-modeller, avviksdeteksjon og samlet prioritetsscore.
+"""Røde flagg (CRI), registerflagg, prioritetsscore og klagerisiko.
 
-Modellene trenes på den syntetiske generatoren fra eksamensrapporten, men bare på
-feltene som faktisk finnes i TED. amendment_count og subcontractor_pct er derfor ute
-av modellen (de inngår fortsatt i fasiten, og blir støy). Når KOFA-fasit finnes,
-byttes `training_set()` ut med ekte merkede kontrakter.
+Prioriteten er regelbasert. ModelBundle (tre modeller trent på den syntetiske generatoren
+fra eksamensrapporten) brukes ikke lenger i appen fordi den ikke traff bedre enn tilfeldig
+på ekte KOFA-saker. Den beholdes som baseline i kofa_eval og kofa_models.
 """
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import (
     HistGradientBoostingClassifier,
-    IsolationForest,
     RandomForestClassifier,
 )
 from sklearn.impute import SimpleImputer
@@ -25,7 +23,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from . import klagerisiko
-from .db import get_meta, set_meta, tx
+from .db import set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
 from .synthetic import training_set
@@ -50,13 +48,8 @@ FLAG_LABELS = {
     "accel": ("Akselerert prosedyre", 0.7), "share": ("Markedsandel >30 %", 0.4),
 }
 CRI_MAX = sum(w for _, w in FLAG_LABELS.values())
-# Vekting i prioritetsscoren. Dokumentert på metodesiden.
-# «regler»: bare røde flagg og registerflagg. ML er under utvikling og vises ved siden av, men teller ikke.
-# «ml»: den opprinnelige blandingen fra eksamensrapporten.
-WEIGHTS = {"regler": (0.0, 1.0, 0.0), "ml": (0.60, 0.25, 0.15)}
+# Register-tillegg i prioritetsscoren. Dokumentert på metodesiden.
 BRREG_PER_WEIGHT, BRREG_CAP = 8.0, 20.0
-# Minste antall KOFA-merkede kontrakter (per klasse) før de brukes i treningen
-KOFA_MIN = 30
 
 
 def feature_frame(df: pd.DataFrame) -> pd.DataFrame:
@@ -159,15 +152,6 @@ def contracts_frame(con, extra: list[dict] | None = None) -> pd.DataFrame:
     return df
 
 
-def kofa_training(con, labels: dict[str, int]) -> tuple[pd.DataFrame, np.ndarray] | None:
-    """Features + fasit for kontrakter koblet til KOFA, når det finnes nok av begge klasser."""
-    if sum(labels.values()) < KOFA_MIN or sum(1 for v in labels.values() if v == 0) < KOFA_MIN:
-        return None
-    df = contracts_frame(con)
-    df = df[df.id.isin(labels)].reset_index(drop=True)
-    return feature_frame(df), df.id.map(labels).to_numpy().astype(int)
-
-
 def rule_flags(r) -> list[dict]:
     f = []
     nb = r.num_bidders
@@ -201,20 +185,10 @@ def pct_rank(s: pd.Series) -> pd.Series:
     return s.rank(pct=True, method="average") * 100
 
 
-def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
-    w_ml, w_cri, w_anom = WEIGHTS.get(mode, WEIGHTS["regler"])
+def score_all(con, log=print) -> int:
     df = contracts_frame(con)
     if df.empty:
         return 0
-    X = feature_frame(df)
-    probs = bundle.predict(X)
-    df["ml_lr"], df["ml_rf"], df["ml_gb"] = (probs[n] * 100 for n in ("Logistisk regresjon", "Random Forest", "Gradient Boosting"))
-    df["ml_score"] = df[["ml_lr", "ml_rf", "ml_gb"]].mean(axis=1)
-
-    iso = IsolationForest(n_estimators=200, contamination="auto", random_state=bundle.info["train"]["seed"])
-    Xi = X.fillna(bundle.medians)
-    df["anomaly"] = pct_rank(pd.Series(-iso.fit(Xi).score_samples(Xi), index=df.index))
-
     brreg = BrregIndex(con)
     extra = ExtraIndex(con, brreg.ent)
     suppliers_by_buyer = df.explode("winner_ids").groupby("buyer_id").winner_ids.agg(lambda s: set(s.dropna())).to_dict()
@@ -229,7 +203,7 @@ def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
         cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
         bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * sum(f["weight"] for f in bf)))
     df["cri"], df["brreg_boost"] = cri, bboost
-    raw = w_ml * df.ml_score + w_cri * df.cri + w_anom * df.anomaly + df.brreg_boost
+    raw = df.cri + df.brreg_boost
     df["priority"] = (raw / (100 + BRREG_CAP) * 100).clip(0, 100)
     # Reglene gir mange like poengsummer; ved likhet rangeres større kontrakter først
     df["percentile"] = pct_rank(raw + pct_rank(df.award_value.fillna(df.est_value).fillna(0)) / 1e4)
@@ -239,7 +213,7 @@ def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
     km = klagerisiko.load_model()
     df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "ml_score", "ml_lr", "ml_rf", "ml_gb", "cri", "anomaly", "klagerisiko",
+    cols = ["priority", "tier", "percentile", "cri", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():
@@ -248,12 +222,7 @@ def score_all(con, bundle: ModelBundle, log=print, mode: str = "regler") -> int:
     with tx(con):
         con.execute("DELETE FROM scores")
         con.executemany(f"INSERT INTO scores(contract_id, {','.join(cols)}, flags) VALUES ({','.join('?' * (len(cols) + 2))})", rows)
-        set_meta(con, "model", bundle.info)
-        set_meta(con, "weights", {"mode": mode if mode in WEIGHTS else "regler", "ml": w_ml, "cri": w_cri, "anomaly": w_anom,
-                                  "brreg_per_weight": BRREG_PER_WEIGHT, "brreg_cap": BRREG_CAP})
+        set_meta(con, "weights", {"brreg_per_weight": BRREG_PER_WEIGHT, "brreg_cap": BRREG_CAP})
     log(f"Scoret {len(rows)} kontrakter")
     return len(rows)
 
-
-def model_info(con) -> dict | None:
-    return get_meta(con, "model")

@@ -129,7 +129,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="rounded bg-mid-soft px-2 py-0.5 font-mono text-xs text-mid" title="Fiktive oppdragsgivere og leverandører">DEMODATA</span>
           )}
           <span className="rounded bg-accent-soft px-2 py-0.5 text-xs text-accent" title="Se Modell og metode">
-            Pilot: modell trent på syntetiske data
+            Pilot: regelbaserte flagg
           </span>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-xs text-muted lg:inline">Oppdatert {dateTime(meta?.updated_at)}</span>

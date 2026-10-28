@@ -14,19 +14,11 @@ import traceback
 from . import db
 from .config import settings
 from .ingest import brreg, doffin, einnsyn, kofa, owners, registers, regnskap, sanctions, ted, valg
-from .scoring import ModelBundle, kofa_training, score_all
+from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
 
 _lock = threading.Lock()
-_bundle: ModelBundle | None = None
 status = {"running": False, "step": None, "log": [], "error": None}
-
-
-def bundle() -> ModelBundle:
-    global _bundle
-    if _bundle is None:
-        _bundle = ModelBundle(settings.seed)
-    return _bundle
 
 
 def _log(msg: str) -> None:
@@ -149,13 +141,8 @@ def run(con, demo: bool | None = None) -> None:
             sources = doffin_src | live_sources(con)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
-        _log("Kjører modeller")
-        global _bundle
-        real = kofa_training(con, kofa.labels(con))
-        if real is not None and bundle().info["train"].get("kofa") != len(real[1]):
-            _log(f"Trener på nytt med {len(real[1])} KOFA-merkede kontrakter")
-            _bundle = ModelBundle(settings.seed, real)
-        score_all(con, bundle(), log=_log, mode=settings.priority_mode)
+        _log("Scorer kontrakter")
+        score_all(con, log=_log)
         if not demo and settings.einnsyn:
             # Etter scoring, siden bare prioriterte kontrakter slås opp
             _source("eInnsyn", lambda: einnsyn.refresh(con, log=_log), sources)

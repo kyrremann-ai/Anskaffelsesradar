@@ -28,7 +28,6 @@ from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .ingest import kofa
 from .ingest.kofa_link import hit_row
 from .scoring import CRI_MAX, ModelBundle, contracts_frame, feature_frame, rule_flags
 

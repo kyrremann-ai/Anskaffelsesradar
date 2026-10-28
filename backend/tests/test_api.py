@@ -29,7 +29,7 @@ def test_contracts_detail_brreg_and_assess(client):
     rows = client.get("/api/contracts", params={"limit": 5}).json()["rows"]
     assert rows[0]["priority"] >= rows[-1]["priority"]
     d = client.get(f"/api/contracts/{rows[0]['id']}").json()
-    assert d["drivers"] and d["suppliers"][0]["brreg"]
+    assert "drivers" not in d and "ml_score" not in d and d["suppliers"][0]["brreg"]
     a = client.post(f"/api/contracts/{rows[0]['id']}/assess").json()
     assert "Vurdering" in a["text"] and a["provider"] == "mal"
     keys = {f["key"] for r in client.get("/api/contracts", params={"limit": 500}).json()["rows"] for f in r["flags"]}
@@ -65,13 +65,13 @@ def test_suppliers_and_export(client):
 
 def test_model(client):
     m = client.get("/api/model").json()
-    assert len(m["metrics"]) == 3 and all(x["auc"] > 0.7 for x in m["metrics"])
-    assert m["train"]["kofa"] > 0 and m["extra_flags"] and m["sources"]["KOFA"]["status"] == "demo"
+    assert "metrics" not in m and m["weights"] == {"brreg_per_weight": 8.0, "brreg_cap": 20.0}
+    assert m["extra_flags"] and m["sources"]["KOFA"]["status"] == "demo"
 
 
 def test_klagerisiko_outside_priority(client):
     m = client.get("/api/model").json()
-    assert m["klagerisiko"]["metrics"]["auc"] > 0.6 and m["weights"]["cri"] == 1.0
+    assert m["klagerisiko"]["metrics"]["auc"] > 0.6
     rows = client.get("/api/contracts", params={"limit": 50}).json()["rows"]
     assert all(0 <= r["klagerisiko"] <= 100 for r in rows)
     assert len({round(r["klagerisiko"]) for r in rows}) > 1
