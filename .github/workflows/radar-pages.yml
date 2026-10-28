@@ -36,6 +36,16 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: npm ci
         working-directory: frontend
+      # Bemanningsregisteret avviser skyservere i Claude-miljøet; prøv herfra og legg det som importfil hvis det går
+      - name: Hent bemanningsregisteret
+        if: ${{ !inputs.demo }}
+        continue-on-error: true
+        run: |
+          mkdir -p backend/data/import
+          curl -sf --max-time 180 -H "Accept: application/json" -o /tmp/bemanning.json \
+            https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api/virksomheter \
+            && mv /tmp/bemanning.json backend/data/import/bemanning.json && ls -la backend/data/import/bemanning.json \
+            || echo "::warning::Bemanningsregisteret svarte ikke (bruker forrige fil hvis den finnes)"
       - run: deploy/build_pages.sh pages-out
       - name: Publiser
         run: |

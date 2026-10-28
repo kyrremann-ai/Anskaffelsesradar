@@ -4,7 +4,7 @@ import { CaseFile } from "../components/CaseFile";
 import { Button, Empty, PageHead, Search, Select, Skeleton, TierBadge, cx, scoreColor } from "../components/ui";
 import { STATIC, qs, useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { date } from "../lib/format";
-import { exportCsv } from "../lib/static";
+import { exportCsv, exportLabels } from "../lib/static";
 import { useScope } from "../lib/scope";
 
 const PAGE = 40;
@@ -38,9 +38,17 @@ export default function Workbench() {
       <PageHead title="Arbeidsflate"
         desc="Kontraktene i dine enheter, sortert etter prioritet. Velg en kontrakt for å se hvorfor den er flagget, sette status og skrive notat."
         right={STATIC
-          ? <Button variant="outline" onClick={() => exportCsv(filters).catch((e) => setExportError(String(e.message)))}>Eksporter CSV</Button>
-          : <a className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunk"
-            href={`/api/contracts/export.csv${qs(filters)}`}>Eksporter CSV</a>} />
+          ? <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => exportCsv(filters).catch((e) => setExportError(String(e.message)))}>Eksporter CSV</Button>
+            <Button variant="outline" title="Revisorenes vurderinger (relevant / ikke relevant) som fasit for modellene"
+              onClick={() => exportLabels().catch((e) => setExportError(String(e.message)))}>Revisorvurderinger</Button>
+          </div>
+          : <div className="flex flex-wrap gap-2">
+            <a className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunk"
+              href={`/api/contracts/export.csv${qs(filters)}`}>Eksporter CSV</a>
+            <a className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunk"
+              title="Revisorenes vurderinger (relevant / ikke relevant) som fasit for modellene" href="/api/labels.csv">Revisorvurderinger</a>
+          </div>} />
       {exportError && <p className="-mt-2 mb-3 text-sm text-hi">{exportError}</p>}
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Search value={q} onChange={setQ} placeholder="Søk tittel, oppdragsgiver, leverandør" />
