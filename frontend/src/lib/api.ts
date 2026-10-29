@@ -59,7 +59,8 @@ export type Case = {
   id: number; contract_id: string; title: string; buyer: string; status: string; assignee: string; note: string;
   vurdering?: string; vurdering_grunn?: string; created_at: string; updated_at: string; events: CaseEvent[];
 };
-export type Assessment = { id: number; at: string; provider: string; model: string; text: string };
+// kind "nattlig": laget på forhånd av nattjobben for saker med høy prioritet (radar.ai_vurderinger)
+export type Assessment = { id: number; at: string; provider: string; model: string; text: string; kind?: "nattlig" };
 
 export type ContractDetail = ContractRow & {
   url: string | null; cpv: string; nature: string; accelerated: number; justification: string | null;

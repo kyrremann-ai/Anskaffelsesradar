@@ -13,7 +13,8 @@ declare global { interface Window { claude?: { use(name: string): Promise<any> }
 
 class HttpError extends Error {}
 
-let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string; invoices: InvoiceResult }> | null = null;
+let data: Promise<{ rows: Row[]; cards: Record<string, Card>; meta: any; model: any; llmSystem?: string; invoices: InvoiceResult;
+  ai: Record<string, any> }> | null = null;
 const getJson = (f: string) => fetch(f).then((r) => {
   if (!r.ok) throw new HttpError(`Fant ikke ${f}`);
   return r.json();
@@ -23,12 +24,14 @@ const getJson = (f: string) => fetch(f).then((r) => {
 function load() {
   data ??= getJson("meta.json").then(async (m) => {
     const parts: { contracts: string[]; cards: string[] } = m.files ?? { contracts: ["contracts.json"], cards: ["cards.json"] };
-    const [rows, cards] = await Promise.all([
+    const [rows, cards, ai] = await Promise.all([
       Promise.all(parts.contracts.map(getJson)).then((xs) => xs.flat()),
       Promise.all(parts.cards.map(getJson)).then((xs) => Object.assign({}, ...xs)),
+      // AI-vurderinger laget hver natt for saker med høy prioritet (finnes ikke alltid)
+      getJson("ai.json").catch(() => ({})),
     ]);
     return { rows, cards, meta: m.meta, model: m.model, llmSystem: m.llm_system as string | undefined,
-      invoices: (m.invoices ?? { rows: [], period: null, radar_from: null }) as InvoiceResult };
+      invoices: (m.invoices ?? { rows: [], period: null, radar_from: null }) as InvoiceResult, ai };
   });
   return data;
 }
@@ -71,12 +74,16 @@ async function assess(r: Row, system?: string) {
   return a;
 }
 
+// Kan denne visningen be Claude om en ny vurdering? (Ikke i Cloudflare-versjonen, som bare viser nattens vurderinger.)
+export const canAssess: Promise<boolean> = (async () => !!(await window.claude?.use("sample").catch(() => null)))();
+
 const localAssessments = new Map<string, any>();
-async function assessments(key: string) {
+async function assessments(id: string) {
+  const key = keyOf(id);
   const d = await db();
   let a = null;
   try { a = d ? await d.doc(`assessments/${key}`).get().then((s: any) => (s.exists ? s.data() : null)) : null; } catch { /* ingen get() */ }
-  a ??= localAssessments.get(key);
+  a ??= localAssessments.get(key) ?? (await load()).ai[id] ?? null;
   return a ? [{ id: 1, ...a }] : [];
 }
 
@@ -379,7 +386,7 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
       .sort((a, b) => (b.pub_date ?? "").localeCompare(a.pub_date ?? "")).slice(0, 10)
       .map((x) => ({ id: x.id, title: x.title, pub_date: x.pub_date, tier: x.tier }));
     return { ...rowOut(r), sameSupplier: same, suppliers: r.winner_ids.map((o) => cards[o] ?? { orgnr: o, brreg: null, roles: [], owners: [], registers: {}, regnskap: null, sanctions: null, brreg_url: `https://virksomhet.brreg.no/nb/oppslag/enheter/${o}` }),
-      case: await caseOut(keyOf(id)), assessments: await assessments(keyOf(id)) };
+      case: await caseOut(keyOf(id)), assessments: await assessments(id) };
   }
   if (path === "/api/suppliers") return suppliers(rows, cards, p);
   if ((m = path.match(/^\/api\/suppliers\/(\d+)$/))) {

@@ -53,6 +53,16 @@ jobs:
             gunzip -c deploy/snapshots/bemanning.json.gz > backend/data/import/bemanning.json
           fi
           ls -la backend/data/import/bemanning.json
+      # AI-vurderinger for saker med høy prioritet, laget av nattjobben på claude.ai før dette bygget
+      # (radar.ai_vurderinger, lagret på grenen ai-vurderinger). Uten dem viser siden bare en forklaring.
+      - name: Hent AI-vurderinger
+        run: |
+          mkdir -p backend/data/import
+          if git fetch -q --depth=1 origin ai-vurderinger; then
+            git show FETCH_HEAD:ai_vurderinger.json > backend/data/import/ai_vurderinger.json
+          else
+            echo "::warning::Fant ikke grenen ai-vurderinger"
+          fi
       - run: deploy/build_pages.sh pages-out
       - name: Publiser, sikkerhetskopi og gjenopprettingstest
         env:

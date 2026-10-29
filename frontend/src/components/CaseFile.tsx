@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
-import { saveWorkpaper } from "../lib/static";
+import { canAssess, saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, isoDatesInText, nok, pct, signedPct } from "../lib/format";
 import { Button, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
 
@@ -217,12 +217,16 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
 export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => void }) {
   const { data: d, isLoading } = useApi<ContractDetail>(`/api/contracts/${encodeURIComponent(id)}`);
   const { data: meta } = useApi<Meta>("/api/meta");
+  // Cloudflare-versjonen kan ikke be Claude om nye vurderinger; der vises bare nattens vurderinger
+  const [live, setLive] = useState(!STATIC);
+  useEffect(() => { if (STATIC) canAssess.then(setLive); }, []);
   const assess = useMutation({
     mutationFn: () => api(`/api/contracts/${encodeURIComponent(id)}/assess`, { method: "POST" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/contracts/${encodeURIComponent(id)}`] }),
   });
   if (isLoading || !d) return <div className="space-y-3 p-5"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-24" /><Skeleton className="h-48" /></div>;
   const ai = d.assessments[0];
+  const nightly = ai?.kind === "nattlig";
   return (
     <article className="space-y-6 p-5">
       <header className="space-y-2">
@@ -233,9 +237,9 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         <h2 className="text-lg font-semibold leading-snug [overflow-wrap:anywhere]">{d.title}</h2>
         <p className="text-sm text-muted">{d.buyer} · {d.region} · {d.sector}</p>
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
+          {live && <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
-          </Button>
+          </Button>}
           {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i {d.source === "doffin" ? "Doffin" : "TED"} ↗</a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
@@ -276,9 +280,12 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
 
       {ai && (
         <section className="rounded-md border border-accent/30 bg-accent-soft/60 p-4">
-          <div className="mb-2 text-xs font-medium text-accent">AI-vurdering · beslutningsstøtte, ikke konklusjon · {ai.provider}/{ai.model} · {dateTime(ai.at)}</div>
+          <div className="mb-2 text-xs font-medium text-accent">AI-vurdering · beslutningsstøtte, ikke konklusjon · {ai.provider}/{ai.model} · {nightly ? `laget ${date(ai.at)}` : dateTime(ai.at)}</div>
           <Md text={ai.text} />
         </section>
+      )}
+      {!ai && !live && (
+        <p className="rounded-md border border-line p-3 text-xs text-muted">AI-vurdering lages bare for saker med høy prioritet.</p>
       )}
 
       <Section title="Røde flagg"><FlagList flags={d.flags} /></Section>
