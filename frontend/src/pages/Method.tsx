@@ -96,7 +96,7 @@ export default function Method() {
           <p className="mt-2 text-sm text-muted"><b>Prioritet er en relativ rangering, ikke en sannsynlighet.</b> Høy = topp 5 % nasjonalt, forhøyet = persentil 80–95. Også et datasett med bare uproblematiske anskaffelser har en topp 5 %, så nivået sier hva som bør sjekkes først, ikke at noe er galt.</p>
           <p className="mt-2 text-sm text-muted">
             <b>AI-vurdering:</b> {STATIC
-              ? "I denne demoen skriver Claude (Anthropic) vurderingen, på den innloggede brukerens Claude-konto."
+              ? "I denne demoen skriver Claude (Anthropic) vurderingen. For saker med høy prioritet lages den hver natt og vises med dato; i artifacten kan brukeren også be om en ny på sin egen Claude-konto."
               : "Skrives av språkmodellen som er satt opp på serveren (Mistral i EU eller Claude)."} Modellen får bare
             kontraktsfelt og flagg, aldri personnavn fra registrene. Vurderingen er beslutningsstøtte, ikke en konklusjon.
           </p>

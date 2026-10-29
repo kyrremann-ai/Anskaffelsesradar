@@ -16,6 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import api, db, fakturakontroll, llm, pipeline
+from .config import settings
 from .scoring import FLAG_LABELS
 
 # Artifacten tillater 16 MB per fil. Deler gir god margin og laster parallelt.
@@ -96,8 +97,13 @@ def export(out: Path, log=print) -> dict[str, int]:
                          "llm_system": llm.SYSTEM,
                          # Fakturakontroll: bare summer per leverandør, aldri enkeltlinjer
                          "invoices": fakturakontroll.analyse(api.con)}
+    # AI-vurderinger laget på forhånd av nattjobben (radar.ai_vurderinger), for visninger uten egen Claude-tilgang
+    ai = settings.data_dir / "import" / "ai_vurderinger.json"
+    if ai.exists():
+        ids = {r["id"] for r in rows}
+        files["ai.json"] = {k: v for k, v in json.loads(ai.read_text(encoding="utf-8")).items() if k in ids}
     # Gamle filer fra forrige eksport fjernes, så publiseringen ikke tar med utdaterte deler
-    for old in [*out.glob("contracts*.json"), *out.glob("cards*.json")]:
+    for old in [*out.glob("contracts*.json"), *out.glob("cards*.json"), *out.glob("ai.json")]:
         if old.name not in files:
             old.unlink()
     sizes = {}
