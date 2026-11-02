@@ -13,7 +13,7 @@ FLAGS = {
     "rs_big_share": ("Kontraktsverdi over halve årsomsetningen", 1.0, "Regnskapsregisteret"),
     "rs_neg_equity": ("Negativ egenkapital", 0.8, "Regnskapsregisteret"),
     "rs_missing": ("Ingen årsregnskap registrert", 0.6, "Regnskapsregisteret"),
-    "own_shared_suppliers": ("Felles eier med annen leverandør hos samme oppdragsgiver", 1.2, "Aksjonærregisteret / Proff"),
+    "own_shared_suppliers": ("Felles eier med annen leverandør hos samme oppdragsgiver", 1.2, "Aksjonærregisteret"),
     "own_buyer_person": ("Navnetreff: eier har rolle hos oppdragsgiver", 2.0, "Aksjonærregisteret + Brreg"),
     "own_buyer_owns": ("Oppdragsgiver registrert som eier av leverandøren", 0.3, "Aksjonærregisteret"),
     "pol_link": ("Ubekreftet navnetreff mot lokalpolitiker", 1.5, "Kandidatlister (0,8 hvis ikke valgt)"),
