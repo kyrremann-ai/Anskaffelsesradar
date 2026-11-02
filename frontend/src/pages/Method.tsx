@@ -67,8 +67,13 @@ export default function Method() {
               <tr><td className="py-1">Leverandører med gyldig orgnr</td><td className="num text-right">{int(o.registertreff.gyldig_orgnr)} av {int(o.registertreff.leverandører)} ({pct(100 * o.registertreff.gyldig_orgnr / Math.max(1, o.registertreff.leverandører))})</td></tr>
               <tr><td className="py-1">Av disse funnet i Enhetsregisteret</td><td className="num text-right">{int(o.registertreff.funnet_i_brreg)} ({pct(100 * o.registertreff.funnet_i_brreg / Math.max(1, o.registertreff.gyldig_orgnr))})</td></tr>
               <tr><td className="py-1">Kontrakter uten oppgitt leverandør</td><td className="num text-right">{int(o.registertreff.kontrakter_uten_leverandør)}</td></tr>
+              {!!o.registertreff.aksjonærregister_år?.length && o.registertreff.aksjeselskaper != null && (<>
+                <tr><td className="py-1">Unike leverandører som er AS/ASA</td><td className="num text-right">{int(o.registertreff.aksjeselskaper)}</td></tr>
+                <tr><td className="py-1">Av disse i aksjonærregisteret ({o.registertreff.aksjonærregister_år.join(" og ")})</td><td className="num text-right">
+                  {int(o.registertreff.i_aksjonærregisteret ?? 0)} ({pct(100 * (o.registertreff.i_aksjonærregisteret ?? 0) / Math.max(1, o.registertreff.aksjeselskaper))})</td></tr>
+              </>)}
             </tbody></table>
-            <p className="mt-2 text-xs text-muted">Utenlandske leverandører har ikke norsk orgnr. Usikre verdier brukes ikke i overskridelse og vises som datakvalitet i saksmappen.</p>
+            <p className="mt-2 text-xs text-muted">Utenlandske leverandører har ikke norsk orgnr. AS uten treff i aksjonærregisteret er et datakvalitetspunkt, ikke et trekk ved leverandøren. Usikre verdier brukes ikke i overskridelse og vises som datakvalitet i saksmappen.</p>
           </Card>)}
         <Card title="Faste kontrollpunkter" desc="Slår ut uansett fordeling, og vises ved siden av prioriteten (◆)">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
@@ -158,11 +163,21 @@ export default function Method() {
           </ul>
           <p className="mt-2 text-xs text-muted">Mangler data, sier flagget hva som mangler i stedet for å gjette. Vekten endres ikke av manglende data.</p>
         </Card>
+        <Card title="Aksjonærregisteret" desc="Skatteetatens aksjeeierbok, lastet fra fil. Eierskap per 31.12. hvert år.">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Hva som brukes:</b> eierposter på minst 5 % (aksjeklasser summert), for leverandører og oppdragsgivere i radaren og selskapene som eier dem. To årganger ligger side om side, så både årsskiftet før og etter tildelingen kan sjekkes.</li>
+            <li><b>Indirekte eierskap:</b> eierkjeden følges inntil tre ledd. Andelen ganges sammen (60 % av et holdingselskap som eier 50 % gir 30 %). Eiere med minst 10 % direkte eller beregnet teller.</li>
+            <li><b>Felles eier:</b> to leverandører hos samme oppdragsgiver har en felles eier med minst 10 %. Staten, departementer, helseforetak, kommuner og fylkeskommuner tas ikke med, fordi de eier mange selskaper. Selskaper i samme konsern (≥ 50 % i hvert ledd) teller ikke.</li>
+            <li><b>Eier har rolle hos oppdragsgiver / er lokalpolitiker:</b> personlige eiere matches på navn og fødselsår mot roller i Brreg og kandidatlistene. Treffet er en <i>ubekreftet mulig kobling</i>, ikke bevis.</li>
+            <li><b>Oppdragsgiver eier leverandøren:</b> direkte eller indirekte. Ofte lovlig egenregi, derfor lav vekt.</li>
+            <li><b>Mangler treff:</b> et AS uten eierposter i registeret kan være stiftet etter årsskiftet, ha spredt eierskap (ingen over 5 %) eller mangle innrapportering. Det vises som datakvalitet.</li>
+          </ul>
+        </Card>
         <Card title="Personopplysninger og rettslig grunnlag" desc="Gjelder aksjonærregisteret, kandidatlister og roller i Brreg">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>
             <li><b>Grunnlag:</b> revisjonens lovpålagte oppgave (kommuneloven kap. 24), jf. personvernforordningen art. 6 nr. 1 bokstav e. Anskaffelsesradar AS behandler opplysningene som databehandler for revisjonen. Grunnlaget og en vurdering av personvernkonsekvenser (DPIA) skal være på plass før personopplysninger tas i bruk hos en kunde.</li>
-            <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune, valg og om personen ble valgt lagres fra kandidatlistene. Parti lagres ikke (særlig kategori, GDPR art. 9), og fødselsdato hashes fra Brreg. Personnavn sendes aldri til språkmodellen.</li>
+            <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune, valg og om personen ble valgt lagres fra kandidatlistene. Parti lagres ikke (særlig kategori, GDPR art. 9), og fødselsdato hashes fra Brreg. Fra aksjonærregisteret brukes bare eierposter på minst 5 %, og filen ligger kryptert utenfor det åpne kodelageret. Personnavn sendes aldri til språkmodellen.</li>
             <li><b>Treff er ikke bevis:</b> navn og fødselsår gir en <i>ubekreftet mulig kobling</i>, aldri en bekreftet identitet. Kandidat og innvalgt vises hver for seg. Aksjonærregisteret er et årsskiftebilde, ikke dagens eierskap.</li>
           </ul>
         </Card>

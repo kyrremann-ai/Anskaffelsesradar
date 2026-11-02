@@ -119,7 +119,7 @@ Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ik
 | Regnskapsregisteret | API per orgnr (`REGNSKAP=1`), alle år og konsernregnskap | Åpent | årlig kontraktsverdi > 50 % av omsetning i tildelingsåret, negativ egenkapital, AS uten regnskap |
 | Brreg endringslogg | `oppdateringer/enheter` og `oppdateringer/roller`, bare for leverandører med felles adresse/roller eller uten ansatte | Åpent | avgjør om adresse, ansatte og roller gjaldt på tildelingstidspunktet |
 | Fusjon/fisjon/omdanning | Fil i `data/import/endringer*.csv` (`fra_orgnr;til_orgnr;type;dato`) | Kunngjøringer i Brreg | to orgnr regnes som samme virksomhet |
-| Aksjonærregisteret (Skatteetaten) | Fil i `data/import/aksjonaer<år>.csv` | Fil fra Skatteetaten eller aksjeeiere.no | felles eier med konkurrent, eier har rolle hos oppdragsgiver |
+| Aksjonærregisteret (Skatteetaten) | Uttrekk `data/import/aksjonaer_<år>.csv.gz` (flere år side om side), lages med `python -m radar.ingest.owners <fil> --extract` | Fil fra Skatteetaten. Personopplysninger: ligger i privat datarepo (`RADAR_DATA_REPO`), aldri i dette repoet | felles eier med konkurrent (direkte eller via holdingselskap, inntil tre ledd), oppdragsgiver eier leverandør, eier har rolle hos oppdragsgiver, eier er lokalpolitiker (ubekreftet), konsernforhold |
 | Proff API | `PROFF_API_KEY` | Betalt avtale med Proff. Vi skraper ikke proff.no | eiere, som over |
 | Renholdsregisteret | `RENHOLD_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på renhold (CPV 9091) ikke godkjent |
 | Bemanningsregisteret | `BEMANNING_REGISTER_URL` | Åpent (NLOD) | leverandør på vikar/bemanning (CPV 7962) ikke godkjent |
