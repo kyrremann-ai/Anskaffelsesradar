@@ -4,6 +4,7 @@
 Env:  CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (eller i ~/.config/havbruk/env, KEY=VALUE)
 Bruk (fra repo-roten):
   python deploy/cf_radar.py setup                  # Pages-prosjekt, D1, domene, DNS og Access (én gang)
+                                                   # (kjør igjen for å oppdatere navnet på innloggingssiden)
   python deploy/cf_radar.py deploy ut-pages/       # publiser et bygg fra deploy/build_pages.sh
   python deploy/cf_radar.py invite kari@firma.no [Kari]  # gi tilgang + skriv ut invitasjon
   python deploy/cf_radar.py grant kari@firma.no    # gi én person tilgang
@@ -40,6 +41,7 @@ ZONE = DOMAIN.split(".", 1)[1] if DOMAIN else ""
 PAGES = f"{PROJECT}.pages.dev"
 D1 = os.environ.get("RADAR_D1") or _K["d1"]
 D1_OLD = os.environ.get("RADAR_D1_OLD", "radar-saker")  # databasen fra før EU-jurisdiksjon, brukes av migrer-eu
+TITLE = _K.get("title", "Anskaffelsesradar")  # vises som «Log in to …» på Access-innloggingen
 SESSION = os.environ.get("RADAR_SESSION", "24h")  # hvor lenge en innlogging varer
 ENV_FILE = pathlib.Path(os.environ.get("HAVBRUK_ENV", pathlib.Path.home() / ".config" / "havbruk" / "env"))
 
@@ -77,10 +79,24 @@ def soft(label, fn, *a):
         print(f"{label}: {e}")
 
 
+def wanted_apps():
+    # Én Access-app per vert (Access takler ikke flere domener i én app). Navnet vises på innloggingssiden.
+    w = {PAGES: (f"{TITLE} (pages.dev)" if DOMAIN else TITLE, [PAGES, f"*.{PAGES}"])}
+    if DOMAIN:
+        w[DOMAIN] = (TITLE, [DOMAIN])
+    return w
+
+
+def our_apps():
+    # Finn appene på vert, ikke navn, så de kan gis pene navn. Gamle tekniske navn godtas også.
+    legacy = {PROJECT: PAGES, PROJECT + "-domain": DOMAIN}
+    hosts = wanted_apps()
+    return {h: a for a in api("GET", "/access/apps") or []
+            for h in [a.get("domain") if a.get("domain") in hosts else legacy.get(a.get("name"))] if h}
+
+
 def app_ids():
-    # Eksakte navn: med flere kunder starter alle prosjektnavn med «anskaffelsesradar»
-    names = {PROJECT, PROJECT + "-domain"}
-    ids = [a["id"] for a in api("GET", "/access/apps") or [] if a.get("name") in names]
+    ids = [a["id"] for a in our_apps().values()]
     if not ids:
         sys.exit("Access-app finnes ikke – kjør setup")
     return ids
@@ -135,11 +151,7 @@ def setup():
         migrer_eu()
     else:
         bind_d1()
-    # Én Access-app per vert (Access takler ikke flere domener i én app)
-    apps = {x["name"]: x for x in api("GET", "/access/apps") or []}
-    wanted = {PROJECT: [PAGES, f"*.{PAGES}"]}
     if DOMAIN:
-        wanted[PROJECT + "-domain"] = [DOMAIN]
         soft("domene", api, "POST", f"/pages/projects/{PROJECT}/domains", {"name": DOMAIN})
         zones = api("GET", f"/zones?name={ZONE}", base=ROOT) or []
         if zones:
@@ -152,7 +164,8 @@ def setup():
                 soft("dns", api, "POST", f"/zones/{zid}/dns_records", body, ROOT)
         else:
             print(f"dns: fant ikke sonen {ZONE}; lag CNAME {DOMAIN} -> {PAGES} selv")
-    for name, uris in wanted.items():
+    apps = our_apps()
+    for host, (name, uris) in wanted_apps().items():
         body = {
             "name": name,
             "type": "self_hosted",
@@ -160,8 +173,8 @@ def setup():
             "destinations": [{"type": "public", "uri": u} for u in uris],
             "app_launcher_visible": False,
         }
-        if name in apps:
-            soft("access", api, "PUT", f"/access/apps/{apps[name]['id']}", body)
+        if host in apps:
+            soft("access", api, "PUT", f"/access/apps/{apps[host]['id']}", body)
         else:
             soft("access", api, "POST", "/access/apps", body)
     print(
