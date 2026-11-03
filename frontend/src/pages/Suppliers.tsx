@@ -100,14 +100,28 @@ export function SupplierPage() {
             </dl>
           )}
         </Card>
-        <Card title="Eiere" desc="Aksjonærregisteret (Skatteetaten)">
-          {!d.owners.length ? <p className="text-sm text-muted">Ingen eierdata importert.</p> : (
+        <Card title="Eiere" desc={ownerDesc(d.owners)}>
+          {!d.owners.length ? <p className="text-sm text-muted">{d.owners_note ?? "Ingen eierdata importert."}</p> : (
             <ul className="space-y-1 text-sm">{d.owners.map((o, i) => (
               <li key={i} className="flex justify-between gap-3">
                 {o.orgnr ? <Link to={`/leverandorer/${o.orgnr}`} className="hover:underline">{o.name}</Link> : <span>{o.name}</span>}
-                <span className="num text-xs text-muted">{o.share_pct != null ? `${o.share_pct.toLocaleString("nb-NO")} %` : "–"}</span>
+                <span className="num text-xs text-muted">{o.share_pct != null ? `${o.share_pct.toLocaleString("nb-NO")} %` : "–"}
+                  {o.years && o.years.length === 1 && <span className="ml-1">({o.years[0]})</span>}</span>
               </li>))}
             </ul>
+          )}
+          {!!d.owners_indirect?.length && (
+            <>
+              <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Indirekte, minst 10 %</h4>
+              <ul className="mt-1 space-y-1 text-sm">{d.owners_indirect.map((o, i) => (
+                <li key={i} className="flex justify-between gap-3">
+                  <span>{o.orgnr ? <Link to={`/leverandorer/${o.orgnr}`} className="hover:underline">{o.name}</Link> : o.name}
+                    <span className="block text-xs text-muted">via {o.via.join(" → ")}</span></span>
+                  <span className="num text-xs text-muted">{o.share_pct != null ? `${o.share_pct.toLocaleString("nb-NO")} %` : "–"}</span>
+                </li>))}
+              </ul>
+              <p className="mt-1 text-xs text-muted">Beregnet andel: andelene i kjeden ganget sammen.</p>
+            </>
           )}
         </Card>
         <Card title="Registre og lister">
@@ -147,4 +161,10 @@ export function SupplierPage() {
       </Card>
     </div>
   );
+}
+
+// Årsskiftene eierpostene er registrert, fra aksjonærregisteret
+function ownerDesc(owners: { years?: number[] }[]): string {
+  const ys = [...new Set(owners.flatMap((o) => o.years ?? []))].sort();
+  return ys.length ? `Aksjonærregisteret (Skatteetaten), eierskap per 31.12.${ys.join(" og 31.12.")}` : "Aksjonærregisteret (Skatteetaten)";
 }

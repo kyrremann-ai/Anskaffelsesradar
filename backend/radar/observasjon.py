@@ -126,6 +126,11 @@ def link(con, log=print) -> dict:
     valid = [w for w in winners if ORGNR.match(str(w))]
     known = {r["orgnr"]: r["kind"] for r in con.execute("SELECT orgnr, json_extract(data, '$.kind') AS kind FROM brreg_entities")}
     found = [w for w in valid if known.get(w) not in (None, "ukjent")]
+    # Aksjonærregisteret: unike leverandører som er AS/ASA, og hvor mange av dem som har eierposter i de lastede årgangene
+    forms = {r["orgnr"]: r["f"] for r in con.execute("SELECT orgnr, json_extract(data, '$.organisasjonsform.kode') AS f FROM brreg_entities")}
+    aksjeselskap = {w for w in valid if forms.get(w) in ("AS", "ASA")}
+    owner_years = sorted(r[0] for r in con.execute("SELECT DISTINCT year FROM owners WHERE source='aksjonaerregisteret' AND year IS NOT NULL"))
+    with_owners = {r[0] for r in con.execute("SELECT DISTINCT orgnr FROM owners WHERE source='aksjonaerregisteret'")}
     stats = {
         "kunngjøringer": len(rows),
         "per_kilde": dict(Counter(r["source"] for r in rows)),
@@ -146,6 +151,8 @@ def link(con, log=print) -> dict:
         "registertreff": {
             "leverandører": len(winners), "gyldig_orgnr": len(valid), "funnet_i_brreg": len(found),
             "kontrakter_uten_leverandør": sum(not r["w"] for r in counted),
+            "aksjeselskaper": len(aksjeselskap), "i_aksjonærregisteret": len(aksjeselskap & with_owners),
+            "aksjonærregister_år": owner_years,
         },
     }
     with tx(con):

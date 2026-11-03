@@ -34,7 +34,10 @@ export type Observasjonsenhet = {
   duplikater: Record<string, number>; duplikater_tvetydige: number; kontrakter: number;
   kontrakter_per_kilde: Record<string, number>; forløp: number; tilbudsfrist_kjent: number;
   verdi: { usikker: Record<string, number>; med_tildelt_verdi: number; bare_estimat: number; uten_verdi: number; rammeavtaler: number };
-  registertreff: { leverandører: number; gyldig_orgnr: number; funnet_i_brreg: number; kontrakter_uten_leverandør: number };
+  registertreff: {
+    leverandører: number; gyldig_orgnr: number; funnet_i_brreg: number; kontrakter_uten_leverandør: number;
+    aksjeselskaper?: number; i_aksjonærregisteret?: number; aksjonærregister_år?: number[];
+  };
 };
 
 export type BrregEntity = {
@@ -47,10 +50,13 @@ export type Regnskap = {
   aar: number | null; driftsinntekter: number | null; driftsresultat: number | null; aarsresultat: number | null;
   egenkapital: number | null; gjeld: number | null; eiendeler: number | null;
 };
-export type Owner = { name: string; orgnr: string | null; share_pct: number | null; source: string; year: number | null; person: boolean };
+export type Owner = { name: string; orgnr: string | null; share_pct: number | null; source: string; year: number | null; years?: number[]; person: boolean };
+// Indirekte eier via holdingselskap: andelen er produktet av andelene i kjeden
+export type IndirectOwner = { name: string; orgnr: string | null; share_pct: number | null; via: string[]; person: boolean };
 export type SupplierCard = {
   orgnr: string; brreg: BrregEntity | null; roles: Role[]; brreg_url: string;
-  regnskap: Regnskap | null; owners: Owner[]; registers: Record<string, string>;
+  regnskap: Regnskap | null; owners: Owner[]; owners_indirect?: IndirectOwner[]; owners_note?: string | null;
+  registers: Record<string, string>;
   sanctions: { name: string; datasets: string; is_sanction: number } | null;
 };
 export type SourceStatus = { status: "ok" | "feil" | "av" | "demo"; rows?: number | null; at: string; error?: string; note?: string };

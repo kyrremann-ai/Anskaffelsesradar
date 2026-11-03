@@ -2,7 +2,8 @@
 # Publiserer til hver kunde i deploy/kunder.json, tar sikkerhetskopi av sakene og prøver å gjenopprette den.
 # Jobben blir rød (og GitHub sender e-post) når en kilde feiler, data er gamle, eller backup/gjenoppretting feiler.
 # Hemmeligheter: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DOFFIN_API_KEY (valgfri),
-#   BACKUP_PASSPHRASE (krypterer sikkerhetskopien som lagres i GitHub, utenfor Cloudflare).
+#   BACKUP_PASSPHRASE (krypterer sikkerhetskopien som lagres i GitHub, utenfor Cloudflare),
+#   RADAR_DATA_TOKEN (valgfri: lesetilgang til det private datalageret med aksjonærregisteret, se under).
 name: Radar på Cloudflare
 on:
   schedule:
@@ -53,6 +54,24 @@ jobs:
             gunzip -c deploy/snapshots/bemanning.json.gz > backend/data/import/bemanning.json
           fi
           ls -la backend/data/import/bemanning.json
+      # Aksjonærregisteret (Skatteetaten) inneholder personopplysninger og ligger derfor ikke i dette åpne repoet,
+      # men i et privat repo (variabelen RADAR_DATA_REPO, standard kyrremann-ai/radar-data) som aksjonaer_<år>.csv.gz.
+      # Uttrekket lages med `python -m radar.ingest.owners <fil fra Skatteetaten> --extract aksjonaer_<år>.csv.gz`.
+      # Uten token kjøres radaren uten eierdata, og flaggene sier at konsernforhold er ukjent.
+      - name: Hent aksjonærregisteret
+        if: ${{ !inputs.demo }}
+        env:
+          GH_TOKEN: ${{ secrets.RADAR_DATA_TOKEN }}
+          DATA_REPO: ${{ vars.RADAR_DATA_REPO || 'kyrremann-ai/radar-data' }}
+        run: |
+          mkdir -p backend/data/import
+          if [ -z "$GH_TOKEN" ]; then echo "::warning::RADAR_DATA_TOKEN mangler, kjører uten aksjonærregisteret"; exit 0; fi
+          files=$(gh api "repos/$DATA_REPO/contents" --jq '.[].name | select(test("^aksjonaer_20[0-9][0-9]\\.csv\\.gz$"))') \
+            || { echo "::warning::Fant ikke $DATA_REPO"; exit 0; }
+          for f in $files; do
+            gh api -H "Accept: application/vnd.github.raw" "repos/$DATA_REPO/contents/$f" > "backend/data/import/$f"
+          done
+          ls -la backend/data/import/aksjonaer_* 2>/dev/null || echo "::warning::Ingen aksjonaer_*.csv.gz i $DATA_REPO"
       # AI-vurderinger for saker med høy prioritet, laget av nattjobben på claude.ai før dette bygget
       # (radar.ai_vurderinger, lagret på grenen ai-vurderinger). Uten dem viser siden bare en forklaring.
       - name: Hent AI-vurderinger

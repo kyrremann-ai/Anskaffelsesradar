@@ -49,5 +49,6 @@ Testene ligger i `backend/tests/test_supplier_context.py` (T1–T24) og kjøres 
 - Brregs endringslogg har detaljer (JSON Patch) bare for nyere endringer. Eldre endringer gir status «ukjent», ikke en antakelse.
 - Rollefeeden sier bare at roller endret seg, ikke hvilken rolle. Felles roller med endring etter tildeling merkes derfor, men vekten beholdes.
 - Fusjon, fisjon og omdanning finnes ikke i det åpne API-et. De må legges inn i `data/import/endringer*.csv` (f.eks. fra Brregs kunngjøringer). Uten fil brukes bare underenhet-forholdet og «slettet enhet med samme navn».
-- Konsern som ikke leverer konsernregnskap, oppdages bare via aksjonærregisteret (≥ 50 % eid av et selskap). Til filen er lastet er konsernspørsmålet «ukjent».
+- Konsern som ikke leverer konsernregnskap, oppdages bare via aksjonærregisteret (≥ 50 % eid av et selskap i hvert ledd, inntil fem ledd). Til filen er lastet er konsernspørsmålet «ukjent».
+- Felles eier følger eierkjeden inntil tre ledd med beregnet andel (produkt) ≥ 10 %. Staten, departementer, RHF, kommuner og fylkeskommuner teller ikke som felles eier. Saksmappen viser veien fra hver leverandør til den felles eieren.
 - Lik fordeling av rammeavtaler mellom leverandører er en antakelse. Faktisk fordeling krever avropsdata fra oppdragsgiver.

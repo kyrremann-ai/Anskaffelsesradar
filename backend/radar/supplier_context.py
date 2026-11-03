@@ -114,12 +114,24 @@ class SupplierContext:
         is_parent = any(t == "KONSERN" for _, t in self.years.get(o, {}))
         return {"parent": self.parent.get(o), "is_parent": is_parent, "known": self.has_owners or is_parent}
 
+    def _ancestors(self, o: str) -> list[str]:
+        """Morselskap, mormorselskap osv. (≥ 50 % i hvert ledd), inntil fem ledd."""
+        out, cur = [], o
+        while (cur := self.parent.get(cur)) and cur not in out and cur != o and len(out) < 5:
+            out.append(cur)
+        return out
+
     def same_group(self, a: str, b: str) -> str | None:
         pa, pb = self.parent.get(a), self.parent.get(b)
         if pa == b or pb == a:
             return "morselskap og datterselskap"
         if pa and pa == pb:
             return f"søsterselskaper (eid av {self.name(pa)})"
+        aa, ab = self._ancestors(a), self._ancestors(b)
+        if b in aa or a in ab:
+            return "i samme konsern (eid gjennom datterselskap)"
+        if common := next((x for x in aa if x in ab), None):
+            return f"i samme konsern (begge eid ≥ 50 % gjennom {self.name(common)})"
         return None
 
     def _group_check(self, o: str, why_matters: str) -> dict:
@@ -297,9 +309,14 @@ class SupplierContext:
                     checks.append(_check("Er leverandørene i samme konsern?", "forklarer", f"{self.name(sid)} og {self.name(o)}: {why}"))
                     continue
                 if felt == "eiere":
-                    yr = self.owner_year.get(sid)
-                    st = "ukjent" if not award or not yr or abs(yr - award.year) > 1 else "ok"
-                    tid = [(st, f"eierdata fra {yr or 'ukjent år'}, tildelt {award.year if award else 'ukjent'}")]
+                    # Aksjonærregisteret er et bilde per 31.12. Årsskiftet før eller etter tildelingsåret dekker tidspunktet.
+                    yrs = sorted({y for x in (sid, o) for ow in self.x.owners.get(x, {}).values() for y in ow.get("years") or []}) \
+                        or ([self.owner_year[sid]] if sid in self.owner_year else [])
+                    near = [y for y in yrs if award and award.year - 1 <= y <= award.year]
+                    st = "ok" if near else "ukjent"
+                    tid = [(st, f"eierskap per 31.12.{' og 31.12.'.join(map(str, yrs)) if yrs else ' (ukjent år)'}, "
+                                f"tildelt {award.isoformat() if award else 'ukjent dato'}")]
+                    checks.append(_check("Er eierskapet direkte eller gjennom holdingselskap?", "ok", self._owner_path(sid, o)))
                 else:
                     tid = [self.at_award(sid, award, felt), self.at_award(o, award, felt)]
                 for s_, txt in tid:
@@ -327,12 +344,27 @@ class SupplierContext:
             return {o for o in rest if sp & self.b.people.get(o, set())}
         return self._links(c, flag, others, cands, "roller", "rollen")
 
+    def _owner_path(self, a: str, b: str) -> str:
+        """Hvem som er felles eier, og veien fra hver leverandør (beregnet andel). Personnavn vises ikke her."""
+        common = self.x._owner_keys(a, public=False) & self.x._owner_keys(b, public=False)
+        if not common:
+            return "Ukjent"
+        ua, ub = self.x.ultimate(a), self.x.ultimate(b)
+        # Nærmeste felles eier: kortest vei, deretter størst andel
+        k = min(common, key=lambda k: (len(ua[k]["via"]) + len(ub[k]["via"]), -((ua[k]["pct"] or 0) + (ub[k]["pct"] or 0))))
+        who = ua[k]["owner"]["owner_name"] if ua[k]["owner"]["owner_orgnr"] else "en person (navn i leverandørkortet)"
+
+        def leg(x, u):
+            p = f"{u['pct']:.0f} %".replace(".", ",") if u["pct"] is not None else "ukjent andel"
+            return f"{self.name(x)}: {p} {'direkte' if not u['via'] else 'via ' + ' → '.join(self.x._owner_name(x, v) for v in u['via'])}"
+        return f"Felles eier {who}. {leg(a, ua[k])}; {leg(b, ub[k])}"
+
     def shared_owners(self, c, flag, others):
         if self.x is None:
             return flag
         def cands(sid, rest):
-            mine = self.x._owner_keys(sid)
-            return {o for o in rest if mine & self.x._owner_keys(o)}
+            mine = self.x._owner_keys(sid, public=False)
+            return {o for o in rest if mine & self.x._owner_keys(o, public=False)}
         return self._links(c, flag, others, cands, "eiere", "eierskapet")
 
 

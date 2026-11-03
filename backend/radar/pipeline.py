@@ -64,11 +64,13 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
     if not d.exists():
         return out
     wanted = set()
-    for r in con.execute("SELECT winner_ids FROM contracts"):
+    for r in con.execute("SELECT buyer_id, winner_ids FROM contracts"):
         wanted.update(json.loads(r["winner_ids"] or "[]"))
-    for f in sorted(d.glob("aksjonaer*.csv")):
+        wanted.add(r["buyer_id"])
+    # Én fil per årgang (aksjonaer_2024.csv.gz, aksjonaer_2025.csv.gz); årstallet står i filnavnet
+    for f in sorted([*d.glob("aksjonaer*.csv"), *d.glob("aksjonaer*.csv.gz")]):
         year = next((int(t) for t in re.findall(r"20\d\d", f.name)), None)
-        out["Aksjonærregisteret"] = owners.import_shareholders(con, f, year, wanted, log=_log)
+        out["Aksjonærregisteret"] = out.get("Aksjonærregisteret", 0) + owners.import_shareholders(con, f, year, wanted, log=_log)
     for f in sorted(d.glob("kandidat*.csv")):
         raw = f.read_bytes()
         try:
@@ -95,6 +97,14 @@ def _imports(con, live_ok: set[str] = frozenset()) -> dict[str, int]:
     if kf:
         out["KOFA"] = kofa.match(con)
     return out
+
+
+def _import_note(con, name: str) -> str:
+    if name == "Aksjonærregisteret":
+        yrs = [str(r[0]) for r in con.execute("SELECT DISTINCT year FROM owners WHERE source='aksjonaerregisteret' AND year IS NOT NULL ORDER BY 1")]
+        if yrs:
+            return f"fra fil, eierskap per 31.12.{' og 31.12.'.join(yrs)}"
+    return "fra fil"
 
 
 def _source(name: str, fn, sources: dict, note: str | None = None) -> None:
@@ -131,7 +141,7 @@ def live_sources(con) -> dict:
             if s.opensanctions_url else None, src)
     try:
         for name, n in _imports(con, {k for k, v in src.items() if v.get("status") == "ok"}).items():
-            src[name] = {"status": "ok", "rows": n, "at": db.now(), "note": "fra fil"}
+            src[name] = {"status": "ok", "rows": n, "at": db.now(), "note": _import_note(con, name)}
     except Exception as e:  # noqa: BLE001
         src["Filimport"] = {"status": "feil", "error": str(e)[:300], "at": db.now()}
         _log(f"Filimport feilet: {e}")

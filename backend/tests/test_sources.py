@@ -133,3 +133,70 @@ def test_einnsyn_parse_and_names():
     out = einnsyn.parse_items(items)
     assert len(out) == 1 and out[0]["case"] == "Rammeavtale" and out[0]["date"] == "2026-10-12"
     assert out[0]["url"].startswith("https://einnsyn.no/saksmappe?id=http%3A%2F%2Fdata.einnsyn.no") and "&jid=" in out[0]["url"]
+
+
+# ------------------------------------------------------------ aksjonærregisteret: uttrekk, årganger og indirekte eierskap
+HDR = "Orgnr;Selskap;Aksjeklasse;Navn aksjonær;Fødselsår/orgnr;Postnr/sted;Landkode;Antall aksjer;Antall aksjer selskap\n"
+H1, H2 = "955555551", "955555552"
+
+
+def _register(tmp_path, name, rows):
+    f = tmp_path / name
+    f.write_text("﻿" + HDR + "".join(";".join(map(str, r)) + "\n" for r in rows), encoding="utf-8")
+    return f
+
+
+def test_extract_compact_keeps_5pct_and_reimports(tmp_path, con):
+    src = _register(tmp_path, "full.csv", [
+        (S1, "RENT OG PENT AS", "A-aksjer", "KARI NORDMANN", 1970, "0150 OSLO", "NO", 30, 1000),
+        (S1, "RENT OG PENT AS", "B-aksjer", "KARI NORDMANN", 1970, "0150 OSLO", "NO", 30, 1000),  # 6 % til sammen
+        (S1, "RENT OG PENT AS", "Ordinære aksjer", "LITEN EIER", 1990, "0150 OSLO", "NO", 40, 1000),  # 4 %
+        (S1, "RENT OG PENT AS", "Ordinære aksjer", 'O"BRIEN HOLDING AS', H1, "0150 OSLO", "NO", 900, 1000),
+    ])
+    out = tmp_path / "aksjonaer_2025.csv.gz"
+    assert owners.extract(src, out, log=lambda *_: None) == 2
+    owners.import_shareholders(con, out, 2025, wanted={S1}, log=lambda *_: None)
+    rows = {r["owner_name"]: dict(r) for r in con.execute("SELECT * FROM owners")}
+    assert set(rows) == {"KARI NORDMANN", 'O"BRIEN HOLDING AS'}
+    assert rows["KARI NORDMANN"]["share_pct"] == 6.0 and rows["KARI NORDMANN"]["owner_birth_year"] == 1970
+    assert rows['O"BRIEN HOLDING AS']["owner_orgnr"] == H1 and rows['O"BRIEN HOLDING AS']["year"] == 2025
+
+
+def test_two_years_side_by_side_and_indirect_shared_owner(tmp_path, con):
+    """S1 eies av H1, S2 av H2. Begge holdingselskapene eies 100 % av samme person: felles eier gjennom holdingselskap."""
+    rows = [(S1, "RENT OG PENT AS", "Ordinære aksjer", "HOLDING EN AS", H1, "", "NO", 60, 100),
+            (S2, "SKINNENDE AS", "Ordinære aksjer", "HOLDING TO AS", H2, "", "NO", 40, 100),
+            (H1, "HOLDING EN AS", "Ordinære aksjer", "PER PERSEN", 1975, "", "NO", 100, 100),
+            (H2, "HOLDING TO AS", "Ordinære aksjer", "PER PERSEN", 1975, "", "NO", 100, 100),
+            ("977777777", "ANNET AS", "Ordinære aksjer", "PER PERSEN", 1975, "", "NO", 100, 100)]
+    owners.import_shareholders(con, _register(tmp_path, "a2024.csv", rows), 2024, wanted={S1, S2}, log=lambda *_: None)
+    owners.import_shareholders(con, _register(tmp_path, "a2025.csv", rows), 2025, wanted={S1, S2}, log=lambda *_: None)
+    # Holdingselskapene følges oppover, urelaterte selskaper tas ikke med; to årganger ligger side om side
+    assert {r[0] for r in con.execute("SELECT DISTINCT orgnr FROM owners")} == {S1, S2, H1, H2}
+    assert {r[0] for r in con.execute("SELECT DISTINCT year FROM owners")} == {2024, 2025}
+    # Ny import av samme år erstatter bare det året
+    owners.import_shareholders(con, _register(tmp_path, "b2025.csv", rows), 2025, wanted={S1, S2}, log=lambda *_: None)
+    assert con.execute("SELECT COUNT(*) FROM owners").fetchone()[0] == 8
+
+    x = ExtraIndex(con, brreg.BrregIndex(con).ent)
+    u = x.ultimate(S2)
+    per = next(v for k, v in u.items() if k.startswith("per persen"))
+    assert per["pct"] == 40.0 and per["via"] == [H2]
+    c1 = {"id": "C1", "buyer_id": BUYER, "winner_ids": [S1], "cpv": "90910000", "award_value": 800000.0}
+    f = next(f for f in x.flags(c1, {S1, S2}) if f["key"] == "own_shared_suppliers")
+    assert "Skinnende AS" in f["why"] and "holdingselskap" in f["why"] and "2024 og 2025" in f["why"]
+    card = x.supplier(S1)
+    assert card["owners_indirect"][0]["share_pct"] == 60.0 and card["owners_indirect"][0]["via"] == ["HOLDING EN AS"]
+    assert card["owners"][0]["years"] == [2024, 2025] and card["owners_note"] is None
+
+
+def test_public_owner_not_shared_and_missing_is_data_quality(tmp_path, con):
+    rows = [(S1, "RENT OG PENT AS", "Ordinære aksjer", "STATEN V/NÆRINGS- OG FISKERIDEPARTEMENTET", "912660680", "", "NO", 50, 100),
+            (S2, "SKINNENDE AS", "Ordinære aksjer", "STATEN V/NÆRINGS- OG FISKERIDEPARTEMENTET", "912660680", "", "NO", 50, 100)]
+    owners.import_shareholders(con, _register(tmp_path, "a2024.csv", rows), 2024, wanted={S1, S2}, log=lambda *_: None)
+    x = ExtraIndex(con, brreg.BrregIndex(con).ent)
+    c1 = {"id": "C1", "buyer_id": BUYER, "winner_ids": [S1], "cpv": "90910000", "award_value": 8e5}
+    assert "own_shared_suppliers" not in {f["key"] for f in x.flags(c1, {S1, S2})}
+    con.execute("DELETE FROM owners WHERE orgnr=?", (S2,))
+    x = ExtraIndex(con, brreg.BrregIndex(con).ent)
+    assert "Datakvalitet" in x.supplier(S2)["owners_note"] and "2024" in x.supplier(S2)["owners_note"]
