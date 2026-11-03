@@ -17,7 +17,8 @@ Bruk (fra repo-roten):
   RADAR_KUNDE=kommune-x python deploy/cf_radar.py setup   # kunde fra deploy/kunder.json (standard: demo)
 
 Token-rettigheter: Account: Cloudflare Pages Edit, D1 Edit, Access: Apps and Policies Edit,
-Access: Audit Logs Read; Zone (vikingsea.no): DNS Edit, Zone Read.
+Access: Audit Logs Read,
+Access: Organizations, Identity Providers, and Groups Read (for å låse innloggingen til engangskode); Zone (vikingsea.no): DNS Edit, Zone Read.
 """
 import json
 import os
@@ -164,6 +165,12 @@ def setup():
                 soft("dns", api, "POST", f"/zones/{zid}/dns_records", body, ROOT)
         else:
             print(f"dns: fant ikke sonen {ZONE}; lag CNAME {DOMAIN} -> {PAGES} selv")
+    # Bare engangskode på e-post: skjul «Sign in with: Cloudflare» og andre innloggingsvalg
+    idps = soft("innlogging", api, "GET", "/access/identity_providers")
+    otp = [i["id"] for i in idps or [] if i.get("type") == "onetimepin"]
+    if not otp:
+        print("innlogging: fant ikke One-time PIN (tokenet trenger «Access: Organizations, Identity Providers, "
+              "and Groups Read»). Velg den selv under Access > Applications > appen > Login methods.")
     apps = our_apps()
     for host, (name, uris) in wanted_apps().items():
         body = {
@@ -173,6 +180,8 @@ def setup():
             "destinations": [{"type": "public", "uri": u} for u in uris],
             "app_launcher_visible": False,
         }
+        if otp:
+            body |= {"allowed_idps": otp, "auto_redirect_to_identity": True}
         if host in apps:
             soft("access", api, "PUT", f"/access/apps/{apps[host]['id']}", body)
         else:
