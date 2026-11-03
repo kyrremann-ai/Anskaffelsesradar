@@ -182,6 +182,8 @@ def setup():
         }
         if otp:
             body |= {"allowed_idps": otp, "auto_redirect_to_identity": True}
+        elif host in apps:  # behold innloggingsvalg satt for hånd i dashbordet
+            body |= {k: apps[host][k] for k in ("allowed_idps", "auto_redirect_to_identity") if k in apps[host]}
         if host in apps:
             soft("access", api, "PUT", f"/access/apps/{apps[host]['id']}", body)
         else:
