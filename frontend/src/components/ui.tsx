@@ -117,3 +117,36 @@ export function Search({ value, onChange, placeholder }: { value: string; onChan
       aria-label={placeholder} className="h-9 w-full rounded-md border border-line bg-surface px-3 text-sm sm:w-72" />
   );
 }
+
+// Konkurser hos rolleinnehavere (åpne data) + manuell sjekk av konkurskarantene i Konkursregisteret.
+// Radaren slår aldri opp karantene selv og lagrer ikke resultatet.
+export function KonkursCheck({ links, url, compact }: {
+  links?: { orgnr: string; navn: string; konkursdato: string | null; rolle: string; via: string | null }[];
+  url?: string; compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "mt-2 text-sm" : "space-y-2 text-sm"}>
+      {links && links.length > 0 && (
+        <div>
+          <div className="mb-1 text-xs text-muted">Rolle i annet selskap under konkursbehandling</div>
+          <ul className="space-y-0.5">
+            {links.map((k, i) => (
+              <li key={i} className="flex flex-wrap justify-between gap-x-3">
+                <span>{k.via ?? "Rolleinnehaver"} <span className="text-xs text-muted">({k.rolle.toLowerCase()})</span></span>
+                <a href={`https://virksomhet.brreg.no/nb/oppslag/enheter/${k.orgnr}`} target="_blank" rel="noreferrer"
+                  className="text-xs text-accent hover:underline">{k.navn}{k.konkursdato ? `, konkurs ${k.konkursdato}` : ""} ↗</a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-muted">Koblet på navn og fødselsdato i Enhetsregisteret. Er en observasjon, ikke en konklusjon, og sier ikke noe om konkurskarantene.</p>
+        </div>
+      )}
+      {url && (
+        <p className="text-xs text-muted">
+          <a href={url} target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">Sjekk konkurskarantene i Brreg ↗</a>
+          {" "}Krever innlogging med ID-porten. Søk på etternavn og ett fornavn gir fødselsår og kommune, så sammenlign med rollelisten. Radaren lagrer ikke svaret. Noter resultatet i saken om det er relevant.
+        </p>
+      )}
+    </div>
+  );
+}

@@ -39,6 +39,8 @@ class Settings:
     refresh_hours: float = field(default_factory=lambda: float(_env("REFRESH_HOURS", "0")))
     # Tilleggskilder. Tomme verdier = av.
     regnskap: bool = field(default_factory=lambda: _env("REGNSKAP", "1") == "1")
+    # Selskaper under konkursbehandling + roller (data.brreg.no). Ca. 3 000 kall første gang, deretter bare nye konkurser.
+    brreg_konkurs: bool = field(default_factory=lambda: _env("BRREG_KONKURS", "1") == "1")
     proff_api_key: str = field(default_factory=lambda: _env("PROFF_API_KEY"))
     proff_base_url: str = field(default_factory=lambda: _env("PROFF_BASE_URL", "https://api.proff.no"))
     proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
