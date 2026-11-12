@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS brreg_roles (
 );
 CREATE INDEX IF NOT EXISTS ix_roles_org ON brreg_roles(orgnr);
 CREATE INDEX IF NOT EXISTS ix_roles_person ON brreg_roles(person_key);
+-- Selskaper under konkursbehandling (Enhetsregisteret, åpne data). Roller lagres bare som person_key, aldri navn.
+CREATE TABLE IF NOT EXISTS brreg_konkurs (orgnr TEXT PRIMARY KEY, navn TEXT, konkursdato TEXT, fetched_at TEXT);
+CREATE TABLE IF NOT EXISTS brreg_konkurs_roles (orgnr TEXT, rolle TEXT, rolle_navn TEXT, person_key TEXT);
+CREATE INDEX IF NOT EXISTS ix_konkurs_roles_person ON brreg_konkurs_roles(person_key);
 
 CREATE TABLE IF NOT EXISTS cases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

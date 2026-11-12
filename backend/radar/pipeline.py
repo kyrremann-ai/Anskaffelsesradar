@@ -14,7 +14,7 @@ import traceback
 from . import db
 from .config import settings
 from . import supplier_context
-from .ingest import brreg, brreg_changes, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
+from .ingest import brreg, brreg_changes, brreg_konkurs, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .observasjon import link
 from .scoring import score_all
 from .synthetic import demo_brreg, demo_contracts, demo_extra
@@ -123,6 +123,9 @@ def live_sources(con) -> dict:
     s, src = settings, {}
     # Brreg og regnskap hentes bare for nye leverandører; 0 betyr at alt allerede er lagret
     _source("Brønnøysundregistrene", lambda: brreg.refresh(con, s.brreg_user_agent, s.person_salt, log=_log), src, "nye siden sist")
+    # Konkurser i Enhetsregisteret og rollene der (åpne data). Ikke konkurskarantene, se docs/konkurskarantene.md
+    _source("Brreg konkurser", lambda: brreg_konkurs.refresh(con, s.brreg_user_agent, s.person_salt, log=_log) if s.brreg_konkurs
+            else None, src, "selskaper under konkursbehandling")
     # Endringslogg bare for leverandører med felles adresse/roller eller uten ansatte. Dekker fra ett år før TED_FROM.
     since = f"{int(s.ted_from[:4]) - 1}{s.ted_from[4:10]}"
     _source("Brreg endringslogg", lambda: brreg_changes.refresh(

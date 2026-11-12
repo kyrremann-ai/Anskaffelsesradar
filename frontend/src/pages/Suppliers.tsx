@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, Empty, PageHead, Search, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
+import { Card, KonkursCheck, Empty, PageHead, Search, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
 import { useApi, type ContractRow, type SupplierCard } from "../lib/api";
 import { date, int, nok } from "../lib/format";
 import { useScope } from "../lib/scope";
@@ -89,6 +89,7 @@ export function SupplierPage() {
           {!d.roles.length ? <p className="text-sm text-muted">Ingen roller registrert.</p> : (
             <ul className="space-y-1 text-sm">{d.roles.map((r, i) => <li key={i} className="flex justify-between gap-3"><span>{r.navn}</span><span className="text-xs text-muted">{r.rolle_navn}</span></li>)}</ul>
           )}
+          {d.roles.some((r) => r.type === "person") && <div className="mt-3"><KonkursCheck links={d.konkurs_links} url={d.karantene_url} /></div>}
         </Card>
         <Card title="Regnskap" desc={d.regnskap?.aar ? `Regnskapsregisteret, ${d.regnskap.aar}` : "Regnskapsregisteret"}>
           {!d.regnskap || d.regnskap.driftsinntekter == null ? <p className="text-sm text-muted">Ikke registrert eller ikke hentet.</p> : (
