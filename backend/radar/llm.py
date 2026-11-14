@@ -2,13 +2,22 @@
 
 Personvern: vi sender bare kontraktsfelt og flagg. Aldri navn fra Brreg-roller.
 Uten API-nøkkel brukes en regelbasert mal, så appen virker uten LLM.
+
+Kallene går gjennom agent-core (felles pakke for prosjektene): SDK-ene prøver selv to ganger
+ved 429/5xx/nettfeil. Hvert kall logges i runs.sqlite i datamappen (tokens, tid, status,
+feilmelding, kostnad for Claude). Feiler hovedleverandøren midlertidig og begge nøklene finnes,
+prøves den andre én gang (providers + assess_first). Ingen ruter: dette er én jobb.
 """
 from __future__ import annotations
 
+import functools
 import json
+import time
+from pathlib import Path
 from typing import Protocol
 
-import httpx
+from agent_core import RunLog, get_provider, is_transient
+from agent_core.telemetry import describe
 
 SYSTEM = (
     "Du er en erfaren kommunerevisor. Skriv en kort, nøktern vurdering på norsk bokmål av om en offentlig "
@@ -18,6 +27,14 @@ SYSTEM = (
     "**Vurdering:** én setning\n**Hvorfor:**\n- punkt\n**Sjekk dette:**\n- punkt"
 )
 
+# Listepris i USD per million tokens (Anthropic, sjekket 2026-11-14), for kostnad i runs.sqlite.
+# Mistral faktureres etter egne priser og logges uten kostnad.
+PRICES = {
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},
+}
+
 
 class Provider(Protocol):
     name: str
@@ -26,40 +43,52 @@ class Provider(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
-class MistralProvider:
-    name = "mistral"
+class CoreProvider:
+    """Én agent-core-leverandør med fast modell og instruks. ``name`` lagres i assessments."""
 
-    def __init__(self, api_key: str, model: str):
-        self.api_key, self.model = api_key, model
-
-    def complete(self, prompt: str) -> str:
-        r = httpx.post(
-            "https://api.mistral.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            json={"model": self.model, "temperature": 0.2, "max_tokens": 500,
-                  "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]},
-            timeout=60,
-        )
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
-
-
-class ClaudeProvider:
-    name = "claude"
-
-    def __init__(self, api_key: str, model: str):
-        self.api_key, self.model = api_key, model
+    def __init__(self, name: str, model: str, core, max_tokens: int, log: RunLog | None = None):
+        self.name, self.model, self.core, self.max_tokens, self.log = name, model, core, max_tokens, log
 
     def complete(self, prompt: str) -> str:
-        r = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": self.api_key, "anthropic-version": "2023-06-01"},
-            json={"model": self.model, "max_tokens": 600, "temperature": 0.2, "system": SYSTEM,
-                  "messages": [{"role": "user", "content": prompt}]},
-            timeout=60,
-        )
-        r.raise_for_status()
-        return "".join(b.get("text", "") for b in r.json()["content"] if b.get("type") == "text").strip()
+        t0 = time.perf_counter()
+        try:
+            out = self.core.complete(model=self.model, system=SYSTEM, prompt=prompt,
+                                     max_tokens=self.max_tokens, temperature=0.2)
+        except Exception as e:
+            self._log(t0, error=e)
+            raise
+        self._log(t0, out=out)
+        return out.text.strip()
+
+    def _log(self, t0: float, out=None, error=None) -> None:
+        if self.log is None:
+            return
+        try:
+            self.log.log(client="radar", agent="ai_vurdering", tier="single", model=self.model,
+                         route_reason=self.name, input_tokens=out.input_tokens if out else 0,
+                         output_tokens=out.output_tokens if out else 0,
+                         latency_ms=int((time.perf_counter() - t0) * 1000), provider=self.core.name,
+                         status="error" if error else "ok", error=describe(error) if error else None)
+        except Exception:  # noqa: BLE001 - logging skal aldri stoppe en vurdering
+            pass
+
+
+def MistralProvider(api_key: str, model: str, log: RunLog | None = None) -> CoreProvider:
+    return CoreProvider("mistral", model, get_provider("mistral", api_key=api_key), 500, log)
+
+
+def ClaudeProvider(api_key: str, model: str, log: RunLog | None = None) -> CoreProvider:
+    return CoreProvider("claude", model, get_provider("anthropic", api_key=api_key), 600, log)
+
+
+@functools.lru_cache
+def _run_log(path: str) -> RunLog:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    return RunLog(path, prices=PRICES)
+
+
+def run_log(s) -> RunLog:
+    return _run_log(str(s.data_dir / "runs.sqlite"))
 
 
 class TemplateProvider:
@@ -84,14 +113,26 @@ class TemplateProvider:
         return f"**Vurdering:** Kontrakten {level} (prioritet {d.get('Prioritet')}).\n**Hvorfor:**\n" + "\n".join(why) + "\n**Sjekk dette:**\n" + "\n".join(checks)
 
 
-def provider(s) -> Provider:
-    """Velger leverandør fra innstillingene. LLM_PROVIDER=claude|mistral overstyrer; ellers den nøkkelen som finnes."""
+def providers(s, log: RunLog | None = None) -> list[Provider]:
+    """Leverandører i prioritert rekkefølge. LLM_PROVIDER=claude|mistral velger den første;
+    ellers Mistral (EU) foran Claude. Den andre brukes bare ved midlertidig feil. Uten nøkler: malen."""
+    have = {}
+    if s.mistral_api_key:
+        have["mistral"] = lambda: MistralProvider(s.mistral_api_key, s.mistral_model, log)
+    if s.anthropic_api_key:
+        have["claude"] = lambda: ClaudeProvider(s.anthropic_api_key, s.claude_model, log)
+    if not have:
+        return [TemplateProvider()]
     want = (s.llm_provider or "").lower()
-    if s.anthropic_api_key and (want == "claude" or (not want and not s.mistral_api_key)):
-        return ClaudeProvider(s.anthropic_api_key, s.claude_model)
-    if s.mistral_api_key and want != "claude":
-        return MistralProvider(s.mistral_api_key, s.mistral_model)
-    return TemplateProvider()
+    if want in ("claude", "mistral") and want not in have:
+        return [TemplateProvider()]  # som før: et eksplisitt valg uten nøkkel gir malen
+    order = sorted(have, key=lambda n: (n != want, n != "mistral"))
+    return [have[n]() for n in order]
+
+
+def provider(s) -> Provider:
+    """Hovedleverandøren (uten logging). Brukes til visning av hvilken LLM som er aktiv."""
+    return providers(s)[0]
 
 
 def build_input(c: dict) -> dict:
@@ -113,3 +154,16 @@ def assess(p: Provider, c: dict) -> tuple[dict, str]:
     data = build_input(c)
     prompt = "Kontrakt:\n" + json.dumps(data, ensure_ascii=False, default=str)
     return data, p.complete(prompt)
+
+
+def assess_first(ps: list[Provider], c: dict) -> tuple[dict, str, Provider]:
+    """Som assess, men går videre til neste leverandør ved midlertidig feil (429/5xx/nett).
+    Andre feil (f.eks. 400, feil nøkkel) kastes med en gang. Returnerer leverandøren som svarte."""
+    for i, p in enumerate(ps):
+        try:
+            data, text = assess(p, c)
+            return data, text, p
+        except Exception as e:
+            if i == len(ps) - 1 or not is_transient(e):
+                raise
+    raise RuntimeError("ingen leverandør")  # pragma: no cover

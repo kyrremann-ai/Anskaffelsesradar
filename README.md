@@ -26,7 +26,7 @@ backend/radar/
   synthetic.py       fiktive demodata (+ rapportens treningsgenerator, brukt som baseline i kofa_eval)
   scoring.py         røde flagg (CRI), registerflagg, prioritet, klagerisiko
   klagerisiko.py     modell for KOFA-klage, lagret i models/klagerisiko.json
-  llm.py             Mistral-adapter + regelbasert fallback
+  llm.py             Mistral/Claude via agent-core, logg i runs.sqlite, regelbasert fallback
   pipeline.py        innhenting → scoring («Hent nye data», cron, CLI)
   api.py             FastAPI, serverer også den bygde klienten
 frontend/            React + Vite + Tailwind + Recharts

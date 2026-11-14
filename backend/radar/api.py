@@ -334,10 +334,9 @@ def assess(cid: str):
     r = _contract(cid)
     c = row_out(r, full=True)
     try:
-        inp, text = llm.assess(llm.provider(settings), c)
+        inp, text, p = llm.assess_first(llm.providers(settings, llm.run_log(settings)), c)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"AI-vurdering feilet: {e}") from e
-    p = llm.provider(settings)
     with db.tx(con):
         cur = con.execute("INSERT INTO assessments(contract_id, at, provider, model, input, text) VALUES (?,?,?,?,?,?)",
                           (cid, db.now(), p.name, p.model, json.dumps(inp, ensure_ascii=False, default=str), text))
