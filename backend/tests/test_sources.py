@@ -240,14 +240,18 @@ def test_source_warning_status_and_row_drop():
     assert src["Brreg"]["status"] == "ok"
 
 
-def test_person_salt_guard(con):
+def test_person_salt_guard(con, tmp_path):
     from radar import db
     db.check_person_salt(con, "salt-a", "live")
     db.check_person_salt(con, "salt-a", "live")
     with pytest.raises(db.SaltMismatch):
         db.check_person_salt(con, "salt-b", "live")
-    with pytest.raises(db.SaltMismatch, match="ikke satt"):
-        db.check_person_salt(con, "bytt-meg", "live")
+    # Standardsaltet gir advarsel, ikke stopp (Pages-demoen bruker det), men endring fra det stoppes fortsatt
+    con2 = db.connect(tmp_path / "salt2.sqlite")
+    db.check_person_salt(con2, "bytt-meg", "live")
+    con2.execute("INSERT INTO brreg_roles(orgnr, person_key) VALUES ('1', 'x')")
+    with pytest.raises(db.SaltMismatch):
+        db.check_person_salt(con2, "nytt-salt", "live")
 
 
 def test_sqlite_busy_timeout(con):

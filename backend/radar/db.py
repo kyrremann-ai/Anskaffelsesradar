@@ -280,13 +280,18 @@ def salt_fingerprint(salt: str) -> str:
     return hashlib.sha256(f"radar-salt|{salt}".encode()).hexdigest()[:16]
 
 
+DEFAULT_SALTS = ("", "bytt-meg", "bytt-til-en-lang-tilfeldig-streng")
+
+
 def check_person_salt(con, salt: str, mode: str) -> None:
     """Personnøklene (brreg_roles.person_key) er sha256(navn|fødselsdato|salt). Byttes saltet, får nye roller
     andre nøkler enn de som allerede er lagret, og koblinger av personer på tvers av virksomheter brytes uten feilmelding.
     Derfor lagres et fingeravtrykk av saltet første gang, og pipelinen stopper hvis det endres.
     Bytte av salt krever full re-indeksering: python -m radar.reindex_persons."""
-    if mode == "live" and salt in ("", "bytt-meg", "bytt-til-en-lang-tilfeldig-streng"):
-        raise SaltMismatch("PERSON_SALT er ikke satt. Sett en lang tilfeldig verdi i .env før første live-kjøring.")
+    if mode == "live" and salt in DEFAULT_SALTS:
+        # Advarsel, ikke stopp: Pages-demoen har kjørt med standardsaltet siden start, og et bytte krever
+        # re-indeksering. Kundeinstallasjoner skal sette eget salt (se .env.example).
+        print("Advarsel: PERSON_SALT er ikke satt (standardverdi). Sett en lang tilfeldig verdi i kundeinstallasjoner.", flush=True)
     fp = salt_fingerprint(salt)
     stored = get_meta(con, "person_salt_fp")
     has_roles = con.execute("SELECT 1 FROM brreg_roles WHERE person_key IS NOT NULL LIMIT 1").fetchone()
