@@ -205,10 +205,30 @@ class BrregIndex:
                 self.auditor.add(r["orgnr"])
             if r["er_doed"]:
                 self.dead.add(r["orgnr"])
+        # Selskaper under konkursbehandling og hvem (person_key) som har ledende rolle der
+        self.konkurs = {r["orgnr"]: {"navn": r["navn"], "konkursdato": r["konkursdato"]}
+                        for r in con.execute("SELECT orgnr, navn, konkursdato FROM brreg_konkurs")}
+        self.konkurs_by_person: dict[str, list[tuple[str, str]]] = {}
+        for r in con.execute("SELECT orgnr, rolle_navn, person_key FROM brreg_konkurs_roles"):
+            self.konkurs_by_person.setdefault(r["person_key"], []).append((r["orgnr"], r["rolle_navn"]))
         self.by_addr: dict[str, set[str]] = {}
         for o, e in self.ent.items():
             if e["adresse_key"] and e["orgform"] not in PUBLIC_FORMS:
                 self.by_addr.setdefault(e["adresse_key"], set()).add(o)
+
+    def konkurs_links(self, orgnr: str) -> list[dict]:
+        """Andre selskaper under konkursbehandling der en ledende rolleinnehaver hos orgnr også har rolle.
+        Koblet på navn og full fødselsdato (person_key), ikke bare navn."""
+        out, seen = [], set()
+        for k in sorted(self.people.get(orgnr, set())):
+            for o, rolle in self.konkurs_by_person.get(k, []):
+                if o == orgnr or (k, o) in seen:
+                    continue
+                seen.add((k, o))
+                b = self.konkurs.get(o) or {}
+                out.append({"orgnr": o, "navn": b.get("navn") or o, "konkursdato": b.get("konkursdato"), "rolle": rolle,
+                            "person_key": k})
+        return sorted(out, key=lambda x: (x["konkursdato"] or "", x["orgnr"]), reverse=True)
 
     def flags(self, c: dict, other_suppliers: set[str]) -> list[dict]:
         out: list[dict] = []
@@ -258,6 +278,12 @@ class BrregIndex:
             if linked:
                 add("brreg_shared_suppliers", "Felles rolleinnehaver med annen leverandør hos samme oppdragsgiver", 1.2,
                     ", ".join(self.ent.get(o, {}).get("navn") or o for o in linked[:3]))
+            if kl := self.konkurs_links(sid):
+                orgs = list(dict.fromkeys((x["navn"], x["konkursdato"]) for x in kl))
+                txt = ", ".join(f"{n} (konkurs {d})" if d else n for n, d in orgs[:3])
+                add("brreg_role_bankrupt", "Rolleinnehaver har rolle i annet selskap under konkursbehandling", 1.0,
+                    f"{len({x['person_key'] for x in kl})} person(er), {len(orgs)} selskap: {txt}"
+                    + (" m.fl." if len(orgs) > 3 else "") + ". Sier ikke noe om konkurskarantene.")
             if s["adresse_key"]:
                 co = (self.by_addr.get(s["adresse_key"], set()) & other_suppliers) - {sid}
                 if co:

@@ -11,6 +11,7 @@ Prioriterer offentlige anskaffelser for kommunerevisjon. Data hentes fra TED, Do
 - **Arbeidsflate**: prioritert kø og saksmappe side om side. Erstatter Risikoregister og Saksliste.
 - **Én prioritetsscore (0–100)** fra røde flagg (CRI) og registerflagg. Klagerisiko vises ved siden av og teller ikke.
 - **Brønnøysund**: Enhetsregisteret og roller per leverandør og oppdragsgiver. Gir 11 nye flagg, blant annet stiftet etter kunngjøring, konkurs, ikke MVA-registrert, felles styremedlem med oppdragsgiver og felles roller eller adresse mellom konkurrerende leverandører. Ny side **Leverandører** med koblinger via personer.
+- **Konkurs hos rolleinnehavere**: flagg når daglig leder/styre hos leverandøren har rolle i et annet selskap under konkursbehandling (koblet på navn og fødselsdato). Konkurskarantene hentes ikke (ikke åpne data); saksmappen lenker til Brregs oppslag. Se `docs/konkurskarantene.md`.
 - **Sporbarhet**: alle endringer på en sak logges med hvem og når. AI-vurderinger lagres med modell, tidspunkt og feltene som ble sendt. Hver sak har et arbeidspapir for utskrift eller PDF.
 - **AI via Mistral (EU)** bak en adapter. Uten nøkkel brukes en regelbasert mal. Personnavn sendes aldri til LLM.
 - **Ingen tredjepart i nettleseren**: ingen Google Fonts, ingen sporingsskript.
