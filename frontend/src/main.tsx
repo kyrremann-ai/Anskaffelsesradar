@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import "./index.css";
-import { STATIC, queryClient } from "./lib/api";
+import { queryClient } from "./lib/api";
 import { ScopeProvider } from "./lib/scope";
 import Buyers from "./pages/Buyers";
 import Doffin from "./pages/Doffin";
