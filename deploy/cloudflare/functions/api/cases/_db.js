@@ -1,4 +1,4 @@
-// Saker i D1 (binding DB): én rad per sak, hele saken som JSON (samme form som i artifactens database).
+// Saker i D1 (binding DB): én rad per sak, hele saken som JSON.
 // case_history har hver lagrede versjon, så revisjonssporet ikke avhenger av siste versjon av saken.
 export async function table(db) {
   await db.batch([

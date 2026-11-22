@@ -75,3 +75,49 @@ def test_klagerisiko_outside_priority(client):
     rows = client.get("/api/contracts", params={"limit": 50}).json()["rows"]
     assert all(0 <= r["klagerisiko"] <= 100 for r in rows)
     assert len({round(r["klagerisiko"]) for r in rows}) > 1
+
+
+def test_dismiss_flag_lowers_priority_and_is_logged(client):
+    rows = client.get("/api/contracts", params={"limit": 50}).json()["rows"]
+    r = next(x for x in rows if any((f.get("bidrag") or 0) > 0 for f in x["flags"]))
+    f = max(r["flags"], key=lambda f: f.get("bidrag") or 0)
+    client.post("/api/cases", json={"contractId": r["id"]}, headers={"X-Remote-User": "kari"})
+    assert client.post(f"/api/contracts/{r['id']}/flags/{f['key']}/dismiss", json={"reason": "tull"}).status_code == 422
+    assert client.post(f"/api/contracts/{r['id']}/flags/{f['key']}/dismiss", json={"reason": "annet"}).status_code == 422
+    res = client.post(f"/api/contracts/{r['id']}/flags/{f['key']}/dismiss", json={"reason": "konsern", "note": "Samme konsern"},
+                      headers={"X-Remote-User": "kari@kommune.no"}).json()
+    d = res["contract"]
+    g = next(x for x in d["flags"] if x["key"] == f["key"])
+    assert g["dismissed"]["actor"] == "kari@kommune.no" and g["bidrag"] == 0
+    assert abs(d["priority"] - (r["priority"] - f["bidrag"])) < 0.01
+    assert any(e["field"] == "flagg avskrevet" and e["actor"] == "kari@kommune.no" for e in d["case"]["events"])
+    assert client.post(f"/api/contracts/{r['id']}/flags/{f['key']}/dismiss", json={"reason": "konsern"}).status_code == 409
+    assert "Avskrevet" in client.get(f"/api/cases/{d['case']['id']}/arbeidspapir").text
+    csv = client.get("/api/dismissals.csv").text.splitlines()
+    assert len(csv) == 2 and ";konsern;Samme konsern;kari@kommune.no;" in csv[1]
+    assert client.delete(f"/api/dismissals/{res['id']}", headers={"X-Remote-User": "per"}).json() == {"revoked": res["id"]}
+    d = client.get(f"/api/contracts/{r['id']}").json()
+    assert "dismissed" not in next(x for x in d["flags"] if x["key"] == f["key"])
+    assert client.get("/api/dismissals.csv").text.splitlines()[1].endswith(";per")
+
+
+def test_supplier_scope_dismissal_survives_rescoring(client):
+    from radar import api, pipeline
+    rows = client.get("/api/contracts", params={"limit": 500}).json()["rows"]
+    r = next(x for x in rows if len(x["winner_ids"]) == 1 and any(f["source"] == "brreg" and not f.get("dismissed") for f in x["flags"]))
+    f = next(f for f in r["flags"] if f["source"] == "brreg")
+    client.post(f"/api/contracts/{r['id']}/flags/{f['key']}/dismiss", json={"reason": "konsern", "scope": "leverandor"})
+    pipeline.run(api.con, demo=True)
+    for x in client.get("/api/contracts", params={"supplier": r["winner_ids"][0], "limit": 500}).json()["rows"]:
+        for g in x["flags"]:
+            if g["key"] == f["key"]:
+                assert g["dismissed"]["scope"] == "leverandor" and g["bidrag"] == 0
+
+
+def test_require_user(client, monkeypatch):
+    import dataclasses
+    from radar import api
+    monkeypatch.setattr(api, "settings", dataclasses.replace(api.settings, require_user=True))
+    cid = client.get("/api/contracts", params={"limit": 3}).json()["rows"][2]["id"]
+    assert client.post("/api/cases", json={"contractId": cid}).status_code == 401
+    assert client.post("/api/cases", json={"contractId": cid}, headers={"X-Remote-User": "ola@kommune.no"}).status_code == 200

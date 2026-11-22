@@ -12,12 +12,6 @@ Oppdateres når en leverandør eller et lagringssted endres. Sist gjennomgått: 
 
 AI-vurdering er av i Cloudflare-versjonen. Ingen data sendes til en språkmodell.
 
-## Artifact-versjonen (bare demo, ingen kundedata)
-
-| Leverandør | Rolle | Data | Lagringssted | Overføringsgrunnlag |
-|---|---|---|---|---|
-| Anthropic PBC | Hosting av siden og artifactens database, Claude-vurdering via brukerens egen konto | Saker og notater i demo, kontraktsfelt uten personnavn til Claude | USA | DPF/SCC i Anthropics vilkår |
-
 ## Serverversjonen (Hetzner, ikke i drift)
 
 | Leverandør | Rolle | Data | Lagringssted |
@@ -26,6 +20,9 @@ AI-vurdering er av i Cloudflare-versjonen. Ingen data sendes til en språkmodell
 | Mistral AI SAS | AI-vurdering (standard for kunder) | Kontraktsfelt og flagg, aldri personnavn (`llm.py:build_input`) | EU |
 | Anthropic PBC | AI-vurdering hvis `LLM_PROVIDER=claude` (bare demo) | Som over | USA |
 | Let's Encrypt (ISRG) | TLS-sertifikat | Domenenavn | USA |
+| Kundens egen Microsoft Entra ID | Innlogging (OIDC) og MFA | Navn, e-post, innloggingslogg hos kunden | Kundens tenant |
+
+Innloggingen skjer i kundens egen Entra ID, så Microsoft er kundens databehandler, ikke vår. oauth2-proxy kjører på samme server og lagrer bare en kryptert sesjonscookie i nettleseren.
 
 ## Ikke databehandlere
 

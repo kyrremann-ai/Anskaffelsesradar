@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 import httpx
 
 from ..db import now, tx
+from . import validate
 
 URL = "https://data.brreg.no/regnskapsregisteret/regnskap/{orgnr}"
 
@@ -100,5 +101,11 @@ def refresh(con, user_agent: str, log=print, workers: int = 4) -> int:
 
     with httpx.Client(headers={"Accept": "application/json", "User-Agent": user_agent}) as c, ThreadPoolExecutor(workers) as ex:
         res = [r for r in ex.map(lambda o: one(c, o), todo) if r]
-    store(con, [r for r, _ in res], [y for _, ys in res for y in ys])
+    if len(res) < len(todo) * 0.5 and len(todo) >= 20:
+        validate.warn(f"Regnskapsregisteret: {len(todo) - len(res)} av {len(todo)} oppslag feilet (nett, rate limit eller ugyldig JSON)")
+    # Bare orgnr med et faktisk regnskap telles i kjernefelt-sjekken (tomme rader betyr «ikke funnet»)
+    latest = validate.check("Regnskapsregisteret", [r for r, _ in res], validate.RegnskapRow)
+    validate.check("Regnskapsregisteret", [r for r in latest if len(r) > 1], validate.RegnskapRow, core=("aar", "driftsinntekter"))
+    years = validate.check("Regnskapsregisteret (alle år)", [y for _, ys in res for y in ys], validate.RegnskapAarRow)
+    store(con, latest, years)
     return len(res)

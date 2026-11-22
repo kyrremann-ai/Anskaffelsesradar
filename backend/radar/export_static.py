@@ -1,9 +1,9 @@
-"""Eksporterer databasen til JSON-filer for den statiske artifact-versjonen av klienten.
+"""Eksporterer databasen til JSON-filer for den statiske Pages-versjonen av klienten.
 
     python -m radar.export_static ut/        # skriver contracts-N.json, cards-N.json, meta.json
 
 Klienten (bygget med VITE_STATIC=1) leser filene og regner ut oversikt, filtre og
-leverandørlister selv. Saker lagres i artifactens database, ikke her.
+leverandørlister selv. Saker lagres i D1, ikke her.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from . import api, db, fakturakontroll, llm, pipeline
 from .config import settings
 from .scoring import FLAG_LABELS
 
-# Artifacten tillater 16 MB per fil. Deler gir god margin og laster parallelt.
+# Flere mindre filer laster parallelt og holder seg under Cloudflare Pages sin grense på 25 MB per fil.
 CONTRACTS_PER_FILE = 2500
 CARDS_PER_FILE = 2500
 
@@ -28,7 +28,7 @@ FULL = ["url", "cpv", "nature", "accelerated", "justification", "tender_duration
 
 
 def _clean(v):
-    """NaN/inf er ikke gyldig JSON og stopper klienten. Ødelagte tegn avvises av artifacten."""
+    """NaN/inf er ikke gyldig JSON og stopper klienten. Ødelagte tegn gir ugyldig JSON."""
     if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
         return None
     if isinstance(v, str):
@@ -93,7 +93,7 @@ def export(out: Path, log=print) -> dict[str, int]:
         files[f"cards-{i // CARDS_PER_FILE + 1}.json"] = {k: cards[k] for k in keys[i:i + CARDS_PER_FILE]}
     parts = {"contracts": [f for f in files if f.startswith("contracts-")], "cards": [f for f in files if f.startswith("cards-")]}
     files["meta.json"] = {"meta": meta, "model": api.model(), "flag_labels": {k: v[0] for k, v in FLAG_LABELS.items()}, "files": parts,
-                         # Samme instruks som serverens AI-vurdering, så artifacten ber Claude om det samme
+                         # Samme instruks som serverens AI-vurdering, så den statiske versjonen ber Claude om det samme
                          "llm_system": llm.SYSTEM,
                          # Fakturakontroll: bare summer per leverandør, aldri enkeltlinjer
                          "invoices": fakturakontroll.analyse(api.con)}

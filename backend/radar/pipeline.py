@@ -14,6 +14,7 @@ import traceback
 from . import db
 from .config import settings
 from . import supplier_context
+from .ingest import validate
 from .ingest import brreg, brreg_changes, brreg_konkurs, doffin, einnsyn, faktura, kofa, owners, registers, regnskap, sanctions, ted, valg
 from .observasjon import link
 from .scoring import score_all
@@ -107,20 +108,37 @@ def _import_note(con, name: str) -> str:
     return "fra fil"
 
 
-def _source(name: str, fn, sources: dict, note: str | None = None) -> None:
-    """Kjører én kilde. En feil stopper ikke resten av oppdateringen."""
+# Kilder som hentes i sin helhet hver gang. For disse betyr et stort fall i antall rader trolig en feil hos kilden.
+# (Kilder merket «nye siden sist» henter bare det som mangler, og 0 er normalt der.)
+_DROP_WARN = 0.5
+
+
+def _source(name: str, fn, sources: dict, note: str | None = None, prev: dict | None = None) -> None:
+    """Kjører én kilde. En feil stopper ikke resten av oppdateringen.
+    Advarsler fra skjemavalideringen (ingest.validate) og fall i antall rader gir status «advarsel»."""
+    validate.current = []
     try:
         n = fn()
         sources[name] = {"status": "ok" if n is not None else "av", "rows": n, "at": db.now()}
         if n is not None and note:
             sources[name]["note"] = note
+        p = (prev or {}).get(name) or {}
+        if n is not None and note is None and (p.get("rows") or 0) >= 100 and n < p["rows"] * _DROP_WARN:
+            validate.warn(f"{name}: {n} rader mot {p['rows']} forrige gang. Mulig formatendring eller tom feed.")
     except Exception as e:  # noqa: BLE001
         sources[name] = {"status": "feil", "error": str(e)[:300], "at": db.now()}
         _log(f"{name} feilet: {e}")
+    finally:
+        if validate.current and name in sources:
+            sources[name]["warnings"] = validate.current[:10]
+            if sources[name]["status"] == "ok":
+                sources[name]["status"] = "advarsel"
+        validate.current = None
 
 
 def live_sources(con) -> dict:
     s, src = settings, {}
+    prev = db.get_meta(con, "sources") or {}
     # Brreg og regnskap hentes bare for nye leverandører; 0 betyr at alt allerede er lagret
     _source("Brønnøysundregistrene", lambda: brreg.refresh(con, s.brreg_user_agent, s.person_salt, log=_log), src, "nye siden sist")
     # Konkurser i Enhetsregisteret og rollene der (åpne data). Ikke konkurskarantene, se docs/konkurskarantene.md
@@ -136,14 +154,20 @@ def live_sources(con) -> dict:
     _source("Proff API", lambda: owners.refresh_proff(con, s.proff_api_key, s.proff_base_url, s.proff_auth_scheme, log=_log)
             if s.proff_api_key else None, src)
     _source("Renholdsregisteret", lambda: registers.refresh(con, "renhold", s.renhold_register_url, log=_log)
-            if s.renhold_register_url else None, src)
+            if s.renhold_register_url else None, src, prev=prev)
     _source("Bemanningsregisteret", lambda: registers.refresh(con, "bemanning", s.bemanning_register_url, log=_log)
-            if s.bemanning_register_url else None, src)
-    _source("Kandidatlister (valg.no)", lambda: valg.refresh(con, log=_log) if s.valg else None, src)
-    _source("OpenSanctions", lambda: sanctions.refresh(con, s.opensanctions_url, s.opensanctions_api_key, log=_log)
-            if s.opensanctions_url else None, src)
+            if s.bemanning_register_url else None, src, prev=prev)
+    _source("Kandidatlister (valg.no)", lambda: valg.refresh(con, log=_log) if s.valg else None, src, prev=prev)
+    # OpenSanctions er CC BY-NC. Hentes bare når kunden har bekreftet hvilken lisens som gjelder (se README).
+    if s.opensanctions_url and not s.opensanctions_license:
+        src["OpenSanctions"] = {"status": "av", "rows": None, "at": db.now(),
+                                "note": "OPENSANCTIONS_URL er satt, men OPENSANCTIONS_LISENS mangler. Ikke hentet."}
+        _log("OpenSanctions hoppet over: OPENSANCTIONS_LISENS er ikke satt")
+    else:
+        _source("OpenSanctions", lambda: sanctions.refresh(con, s.opensanctions_url, s.opensanctions_api_key, log=_log)
+                if s.opensanctions_url else None, src, prev=prev)
     try:
-        for name, n in _imports(con, {k for k, v in src.items() if v.get("status") == "ok"}).items():
+        for name, n in _imports(con, {k for k, v in src.items() if v.get("status") in ("ok", "advarsel")}).items():
             src[name] = {"status": "ok", "rows": n, "at": db.now(), "note": _import_note(con, name)}
     except Exception as e:  # noqa: BLE001
         src["Filimport"] = {"status": "feil", "error": str(e)[:300], "at": db.now()}
@@ -162,6 +186,7 @@ def run(con, demo: bool | None = None) -> None:
     status.update(running=True, error=None, log=[])
     try:
         demo = settings.mode == "demo" if demo is None else demo
+        db.check_person_salt(con, settings.person_salt, "demo" if demo else "live")
         if demo:
             _log("Laster demodata")
             sources = {k: {"status": "demo", "rows": v, "at": db.now()} for k, v in load_demo(con).items()}

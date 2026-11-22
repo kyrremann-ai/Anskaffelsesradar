@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, fakturakontroll, llm, pipeline
+from . import db, dismissals, fakturakontroll, llm, pipeline
 from .config import settings
 from .enrich import FLAGS as EXTRA_FLAGS
 from .enrich import ExtraIndex
@@ -81,9 +81,34 @@ def _frame() -> pd.DataFrame:
     df = _cache["df"]
     if df.empty:
         return df
+    df = _overlay_dismissals(df)
     # Saksstatus endres ofte og hentes ferskt (liten tabell)
     cases = pd.read_sql_query("SELECT contract_id AS id, id AS case_id, status AS case_status FROM cases", con)
     return df.merge(cases, on="id", how="left")
+
+
+def _overlay_dismissals(df: pd.DataFrame) -> pd.DataFrame:
+    """Avskrivninger gjort etter siste scoring: flagget merkes og poengene trekkes fra prioriteten med en gang.
+    Angrede avskrivninger mister merket, men poengene kommer først tilbake ved neste scoring.
+    Nivå og persentil regnes på nytt ved neste oppdatering."""
+    act = dismissals.active(con)
+    if not act[0] and not act[1] and not any("dismissed" in f for fl in df["flags"] for f in fl):
+        return df
+    flags, prio = [], []
+    for fl, cid, wins, p in zip(df["flags"], df["id"], df["winner_ids"], df["priority"]):
+        out, minus = [], 0.0
+        for f in fl:
+            d = dismissals.lookup(act, cid, wins, f["key"])
+            g = {k: v for k, v in f.items() if k != "dismissed"}
+            if d:
+                g["dismissed"] = dismissals.public(d)
+                if "dismissed" not in f:
+                    minus += f.get("bidrag") or 0.0
+                    g["bidrag"] = 0.0
+            out.append(g)
+        flags.append(out)
+        prio.append(max(0.0, p - minus))
+    return df.assign(flags=flags, priority=prio)
 
 
 def brreg_index() -> BrregIndex:
@@ -450,7 +475,14 @@ class CasePatch(BaseModel):
 
 
 def actor(req: Request) -> str:
-    return req.headers.get("x-remote-user") or req.headers.get("remote-user") or "revisor"
+    """Hvem som gjør endringen. Settes av Caddy fra oauth2-proxy (e-post fra Entra ID) eller basic auth.
+    Appen er ikke eksponert direkte (bare via Caddy), og Caddy fjerner headeren fra klienten før den settes."""
+    u = (req.headers.get("x-remote-user") or req.headers.get("remote-user") or "").strip()
+    if u:
+        return u[:200]
+    if settings.require_user:
+        raise HTTPException(401, "Mangler innlogget bruker. Endringer krever innlogging (REQUIRE_USER=1).")
+    return "revisor"
 
 
 @app.get("/api/cases")
@@ -499,11 +531,94 @@ def update_case(case_id: int, body: CasePatch, req: Request):
 
 
 @app.delete("/api/cases/{case_id}")
-def delete_case(case_id: int):
+def delete_case(case_id: int, req: Request):
+    actor(req)  # sletting krever også innlogget bruker
     with db.tx(con):
         con.execute("DELETE FROM case_events WHERE case_id=?", (case_id,))
         con.execute("DELETE FROM cases WHERE id=?", (case_id,))
     return {"deleted": case_id}
+
+
+# ---------------------------------------------------------------- avskrevne flagg
+
+class DismissIn(BaseModel):
+    reason: str
+    note: str = ""
+    scope: str = "kontrakt"
+    orgnr: str | None = None   # påkrevd når scope = leverandor og kontrakten har flere leverandører
+
+
+@app.get("/api/dismissal-reasons")
+def dismissal_reasons():
+    return [{"code": c, "label": t, "supplier_scope": s} for c, t, s in dismissals.REASONS]
+
+
+def _case_event(cid: str, who: str, field: str, old, new) -> None:
+    c = con.execute("SELECT id FROM cases WHERE contract_id=?", (cid,)).fetchone()
+    if c:
+        con.execute("INSERT INTO case_events(case_id, at, actor, field, old, new) VALUES (?,?,?,?,?,?)",
+                    (c["id"], db.now(), who, field, old, new))
+        con.execute("UPDATE cases SET updated_at=? WHERE id=?", (db.now(), c["id"]))
+
+
+@app.post("/api/contracts/{cid}/flags/{key}/dismiss")
+def dismiss_flag(cid: str, key: str, body: DismissIn, req: Request):
+    who = actor(req)
+    r = _contract(cid)
+    flag = next((f for f in r["flags"] if f["key"] == key), None)
+    if not flag:
+        raise HTTPException(404, "Flagget finnes ikke på kontrakten")
+    if flag.get("dismissed"):
+        raise HTTPException(409, "Flagget er allerede avskrevet")
+    if body.reason not in dismissals.REASON_CODES:
+        raise HTTPException(422, f"Ugyldig årsak. Gyldige: {sorted(dismissals.REASON_CODES)}")
+    if body.scope not in dismissals.SCOPES:
+        raise HTTPException(422, f"Ugyldig omfang. Gyldige: {list(dismissals.SCOPES)}")
+    if body.reason == "annet" and not body.note.strip():
+        raise HTTPException(422, "Årsaken «Annet» krever en begrunnelse i notatet")
+    orgnr = None
+    if body.scope == "leverandor":
+        wins = list(r.winner_ids or [])
+        orgnr = body.orgnr or (wins[0] if len(wins) == 1 else None)
+        if orgnr not in wins:
+            raise HTTPException(422, "Velg hvilken leverandør avskrivningen gjelder")
+    label = dict((c, t) for c, t, _ in dismissals.REASONS)[body.reason]
+    with db.tx(con):
+        cur = con.execute("INSERT INTO flag_dismissals(contract_id, orgnr, scope, flag_key, reason, note, actor, at) "
+                          "VALUES (?,?,?,?,?,?,?,?)", (cid, orgnr, body.scope, key, body.reason, body.note.strip(), who, db.now()))
+        where = f" (gjelder leverandør {orgnr} overalt)" if orgnr else ""
+        _case_event(cid, who, "flagg avskrevet", flag["label"], f"{label}{where}")
+    return {"id": cur.lastrowid, "contract": contract_detail(cid)}
+
+
+@app.delete("/api/dismissals/{did}")
+def revoke_dismissal(did: int, req: Request):
+    who = actor(req)
+    d = con.execute("SELECT * FROM flag_dismissals WHERE id=? AND revoked_at IS NULL", (did,)).fetchone()
+    if not d:
+        raise HTTPException(404, "Fant ikke en aktiv avskrivning")
+    with db.tx(con):
+        con.execute("UPDATE flag_dismissals SET revoked_at=?, revoked_by=? WHERE id=?", (db.now(), who, did))
+        _case_event(d["contract_id"], who, "avskrivning angret", d["flag_key"], None)
+    return {"revoked": did}
+
+
+@app.get("/api/dismissals.csv")
+def dismissals_csv():
+    """Alle avskrivninger, også angrede, med flaggets vekt: datasett for å kalibrere vektene i scoring.py."""
+    labels = {k: v[0] for k, v in FLAG_LABELS.items()} | {k: v[0] for k, v in EXTRA_FLAGS.items()}
+    weights = {k: v[1] for k, v in FLAG_LABELS.items()} | {k: v[1] for k, v in EXTRA_FLAGS.items()}
+    rows = [{"id": d["id"], "kontrakt_id": d["contract_id"], "flagg": d["flag_key"], "flagg_tekst": labels.get(d["flag_key"], ""),
+             "vekt": weights.get(d["flag_key"]), "omfang": d["scope"], "leverandor_orgnr": d["orgnr"] or "",
+             "arsak": d["reason"], "notat": d["note"], "avskrevet_av": d["actor"], "avskrevet": d["at"],
+             "angret": d["revoked_at"] or "", "angret_av": d["revoked_by"] or ""}
+            for d in con.execute("SELECT * FROM flag_dismissals ORDER BY id")]
+    cols = ["id", "kontrakt_id", "flagg", "flagg_tekst", "vekt", "omfang", "leverandor_orgnr", "arsak", "notat",
+            "avskrevet_av", "avskrevet", "angret", "angret_av"]
+    buf = io.StringIO()
+    pd.DataFrame(rows, columns=cols).to_csv(buf, index=False, sep=";", decimal=",")
+    return StreamingResponse(iter(["\ufeff" + buf.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=avskrevne-flagg.csv"})
 
 
 @app.get("/api/labels.csv")
@@ -540,7 +655,13 @@ def workpaper(case_id: int):
     d = contract_detail(c["contract_id"])
     e = html.escape
     fmt = lambda v: "–" if v is None else (f"{v:,.0f}".replace(",", " ") if isinstance(v, (int, float)) else e(str(v)))  # noqa: E731
-    flags = "".join(f"<li>{e(f['label'])}{' – ' + e(f['why']) if f.get('why') else ''}{' (' + e(f['data_note']) + ')' if f.get('data_note') else ''} <small>(kilde: {e(f['source'])})</small></li>" for f in d["flags"]) or "<li>Ingen</li>"
+    reasons = {c: t for c, t, _ in dismissals.REASONS}
+
+    def dis(f):
+        x = f.get("dismissed")
+        return (f" <b>Avskrevet</b> {e(x['at'][:10])} av {e(x['actor'] or '')}: {e(reasons.get(x['reason'], x['reason']))}"
+                f"{' – ' + e(x['note']) if x.get('note') else ''}") if x else ""
+    flags = "".join(f"<li>{'<s>' if f.get('dismissed') else ''}{e(f['label'])}{'</s>' if f.get('dismissed') else ''}{' – ' + e(f['why']) if f.get('why') else ''}{' (' + e(f['data_note']) + ')' if f.get('data_note') else ''} <small>(kilde: {e(f['source'])})</small>{dis(f)}</li>" for f in d["flags"]) or "<li>Ingen</li>"
     events = "".join(f"<tr><td>{e(v['at'])}</td><td>{e(v['actor'] or '')}</td><td>{e(v['field'])}</td><td>{e(str(v['old'] or ''))}</td><td>{e(str(v['new'] or ''))}</td></tr>" for v in d["case"]["events"])
     ai = "".join(f"<h3>AI-vurdering {e(a['at'])} ({e(a['provider'])}/{e(a['model'])})</h3><pre>{e(a['text'])}</pre>" for a in d["assessments"])
     sup = "".join(f"<li>{e((s['brreg'] or {}).get('navn') or s['orgnr'])} – orgnr {e(s['orgnr'])}, stiftet {e(str((s['brreg'] or {}).get('stiftet') or '–'))}</li>" for s in d["suppliers"])

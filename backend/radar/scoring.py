@@ -23,7 +23,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from . import klagerisiko
+from . import dismissals, klagerisiko
 from .db import set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
@@ -270,6 +270,7 @@ def score_all(con, log=print) -> int:
     context = SupplierContext(con, brreg, extra)
     suppliers_by_buyer = df.explode("winner_ids").groupby("buyer_id").winner_ids.agg(lambda s: set(s.dropna())).to_dict()
     flags, cri, bboost = [], [], []
+    act = dismissals.active(con)
     for r in df.itertuples():
         fl = rule_flags(r)
         c = {"id": r.id, "buyer_id": r.buyer_id, "winner_ids": r.winner_ids, "pub_date": r.pub_date, "cpv": r.cpv,
@@ -278,15 +279,19 @@ def score_all(con, log=print) -> int:
         others = suppliers_by_buyer.get(r.buyer_id, set())
         # Leverandørflaggene sjekkes mot alternative forklaringer (flerårig verdi, rammeavtale, konsern, tidspunkt, samme enhet)
         bf = context.apply(c, brreg.flags(c, others) + extra.flags(c, others), others)
-        cri.append(sum(f["weight"] for f in fl) / CRI_MAX * 100)
-        bw = sum(f["weight"] for f in bf)
+        # Flagg revisor har avskrevet (falske positiver) vises, men teller ikke
+        for f in fl + bf:
+            if d := dismissals.lookup(act, r.id, r.winner_ids, f["key"]):
+                f["dismissed"] = dismissals.public(d)
+        cri.append(sum(f["weight"] for f in fl if "dismissed" not in f) / CRI_MAX * 100)
+        bw = sum(f["weight"] for f in bf if "dismissed" not in f)
         bboost.append(min(BRREG_CAP, BRREG_PER_WEIGHT * bw))
         # Hvor mange prioritetspoeng hvert flagg bidrar med (register-tillegget deles forholdsmessig når taket nås)
         scale = (100 + BRREG_CAP) / 100
         for f in fl:
-            f["bidrag"] = round(f["weight"] / CRI_MAX * 100 / scale, 1)
+            f["bidrag"] = 0.0 if "dismissed" in f else round(f["weight"] / CRI_MAX * 100 / scale, 1)
         for f in bf:
-            f["bidrag"] = round(bboost[-1] * f["weight"] / bw / scale, 1) if bw else 0.0
+            f["bidrag"] = 0.0 if "dismissed" in f else round(bboost[-1] * f["weight"] / bw / scale, 1) if bw else 0.0
         flags.append(fl + bf)
     df["cri"], df["brreg_boost"] = cri, bboost
     raw = df.cri + df.brreg_boost

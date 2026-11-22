@@ -102,9 +102,14 @@ def features(h: dict) -> dict:
     return f
 
 
-def dataset(link_cache: Path, sample_cache: Path) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
-    pos = {v["hit"]["id"]: v["hit"] for v in json.loads(link_cache.read_text()).values()
-           if v.get("hit") and v["hit"].get("type") == COMPETITION}
+def dataset(link_cache: Path, sample_cache: Path, min_confidence: float | None = None
+            ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
+    """Positive = konkurranser koblet til KOFA med konfidens ≥ min_confidence (KOFA_MIN_CONFIDENCE, se kofa_link)."""
+    from .config import settings
+    from .ingest.kofa_link import confident
+    links = confident(json.loads(link_cache.read_text()),
+                      settings.kofa_min_confidence if min_confidence is None else min_confidence)
+    pos = {v["hit"]["id"]: v["hit"] for v in links.values() if v["hit"].get("type") == COMPETITION}
     neg = {k: h for k, h in json.loads(sample_cache.read_text())["hits"].items() if k not in pos}
     lo = min(h["issueDate"][:10] for h in pos.values())
     neg = {k: h for k, h in neg.items() if h["issueDate"][:10] >= lo}

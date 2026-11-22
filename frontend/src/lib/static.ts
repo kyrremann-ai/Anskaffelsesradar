@@ -1,7 +1,7 @@
-// Statisk modus (VITE_STATIC=1): klienten kjører som artifact på claude.ai uten egen server.
+// Statisk modus (VITE_STATIC=1): Cloudflare Pages-versjonen (radar.vikingsea.no), uten egen server.
 // Kontraktsdata leses fra contracts.json/cards.json/meta.json som publiseres sammen med siden
 // (laget av `python -m radar.export_static`). Oversikt, filtre og lister regnes ut her.
-// Saker lagres i artifactens database (db-kapabiliteten), så de deles mellom brukerne.
+// Saker lagres i D1 via deploy/cloudflare/public/shim.js (samme grensesnitt som window.claude), så de deles mellom brukerne.
 import type { Case, CaseEvent, ContractRow, Group, InvoiceResult, Stats, SupplierCard } from "./api";
 
 type Row = ContractRow & Record<string, unknown> & { winner: string | null };
@@ -20,7 +20,7 @@ const getJson = (f: string) => fetch(f).then((r) => {
   return r.json();
 });
 
-// Dataene er delt i flere filer (grense per fil i artifacten); meta.json lister dem
+// Dataene er delt i flere filer (holder hver fil liten, så de lastes parallelt); meta.json lister dem
 function load() {
   data ??= getJson("meta.json").then(async (m) => {
     const parts: { contracts: string[]; cards: string[] } = m.files ?? { contracts: ["contracts.json"], cards: ["cards.json"] };
@@ -36,7 +36,7 @@ function load() {
   return data;
 }
 
-// ------------------------------------------------------------------ AI-vurdering (Claude via artifacten)
+// ------------------------------------------------------------------ AI-vurdering (Claude, når shim-en tilbyr det)
 
 // Demo: Claude svarer på brukerens egen Claude-konto. Serverversjonen bruker Mistral (EU) eller Claude via API.
 const AI_MODEL = "claude-sonnet-5-5";
@@ -431,7 +431,7 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
     }
   }
   if (path === "/api/cases") return Promise.all([...cases.keys()].map(caseOut));
-  if (path === "/api/refresh") throw new HttpError("Dataene oppdateres automatisk hver natt i artifact-versjonen.");
+  if (path === "/api/refresh") throw new HttpError("Dataene oppdateres automatisk hver natt i den statiske versjonen.");
   if (path.startsWith("/api/doffin")) throw new HttpError("Doffin live krever serverversjonen.");
-  throw new HttpError("Ikke tilgjengelig i artifact-versjonen");
+  throw new HttpError("Ikke tilgjengelig i den statiske versjonen");
 }

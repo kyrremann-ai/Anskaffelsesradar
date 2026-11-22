@@ -164,7 +164,20 @@ CREATE TABLE IF NOT EXISTS brreg_changes_fetched (orgnr TEXT PRIMARY KEY, since 
 CREATE TABLE IF NOT EXISTS brreg_successors (
     fra_orgnr TEXT, til_orgnr TEXT, type TEXT, dato TEXT, kilde TEXT, PRIMARY KEY (fra_orgnr, til_orgnr)
 );
+-- Revisorens avskrivning av flagg (falske positiver), med årsakskode. Rader slettes aldri: en angret avskrivning
+-- får revoked_at, så revisjonssporet er komplett. scope: kontrakt (bare denne) | leverandor (flagget for orgnr overalt).
+CREATE TABLE IF NOT EXISTS flag_dismissals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contract_id TEXT, orgnr TEXT, scope TEXT NOT NULL DEFAULT 'kontrakt', flag_key TEXT NOT NULL,
+    reason TEXT NOT NULL, note TEXT DEFAULT '', actor TEXT, at TEXT,
+    revoked_at TEXT, revoked_by TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_dismiss_contract ON flag_dismissals(contract_id);
+CREATE INDEX IF NOT EXISTS ix_dismiss_orgnr ON flag_dismissals(orgnr);
 """
+
+
+BUSY_TIMEOUT_S = 30.0
 
 
 def now() -> str:
@@ -173,9 +186,13 @@ def now() -> str:
 
 def connect(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(path, check_same_thread=False)
+    # timeout = busy_timeout: nattlig pipeline og appen skriver til samme fil. Uten ventetid gir samtidige
+    # skrivinger «database is locked» med en gang; med WAL blokkerer lesere aldri skrivere.
+    con = sqlite3.connect(path, check_same_thread=False, timeout=BUSY_TIMEOUT_S)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
+    con.execute(f"PRAGMA busy_timeout={int(BUSY_TIMEOUT_S * 1000)}")
+    con.execute("PRAGMA synchronous=NORMAL")  # trygt med WAL, og raskere ved store skrivinger
     con.execute("PRAGMA foreign_keys=ON")
     if (c := {r[1] for r in con.execute("PRAGMA table_info(observasjon)")}) and "cn_ref" not in c:
         con.execute("DROP TABLE observasjon")  # bygges på nytt hver kjøring
@@ -252,3 +269,42 @@ def upsert_contracts(con, rows: list[dict]) -> int:
     with tx(con):
         con.executemany(sql, vals)
     return len(vals)
+
+
+class SaltMismatch(RuntimeError):
+    pass
+
+
+def salt_fingerprint(salt: str) -> str:
+    import hashlib
+    return hashlib.sha256(f"radar-salt|{salt}".encode()).hexdigest()[:16]
+
+
+def check_person_salt(con, salt: str, mode: str) -> None:
+    """Personnøklene (brreg_roles.person_key) er sha256(navn|fødselsdato|salt). Byttes saltet, får nye roller
+    andre nøkler enn de som allerede er lagret, og koblinger av personer på tvers av virksomheter brytes uten feilmelding.
+    Derfor lagres et fingeravtrykk av saltet første gang, og pipelinen stopper hvis det endres.
+    Bytte av salt krever full re-indeksering: python -m radar.reindex_persons."""
+    if mode == "live" and salt in ("", "bytt-meg", "bytt-til-en-lang-tilfeldig-streng"):
+        raise SaltMismatch("PERSON_SALT er ikke satt. Sett en lang tilfeldig verdi i .env før første live-kjøring.")
+    fp = salt_fingerprint(salt)
+    stored = get_meta(con, "person_salt_fp")
+    has_roles = con.execute("SELECT 1 FROM brreg_roles WHERE person_key IS NOT NULL LIMIT 1").fetchone()
+    if mode == "demo":  # demodata lastes på nytt fra bunnen hver gang
+        with tx(con):
+            set_meta(con, "person_salt_fp", fp)
+        return
+    if stored is None:
+        if not has_roles:
+            with tx(con):
+                set_meta(con, "person_salt_fp", fp)
+            return
+        # Database fra før fingeravtrykket fantes: godta dagens salt, men si fra i loggen
+        print("PERSON_SALT: lagrer fingeravtrykk for eksisterende database. Kontroller at saltet ikke er endret.", flush=True)
+        with tx(con):
+            set_meta(con, "person_salt_fp", fp)
+        return
+    if stored != fp:
+        raise SaltMismatch("PERSON_SALT er endret siden personnøklene ble laget. Koblinger av personer på tvers av "
+                           "virksomheter ville blitt brutt. Sett tilbake det gamle saltet, eller kjør full re-indeksering "
+                           "med python -m radar.reindex_persons.")

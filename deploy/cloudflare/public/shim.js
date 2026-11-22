@@ -1,5 +1,5 @@
-// Cloudflare-versjonen (radar.vikingsea.no): erstatter artifactens window.claude med Pages Functions.
-// Klienten er den samme som artifacten (VITE_STATIC=1). Saker lagres i D1 via /api/cases,
+// Cloudflare-versjonen (radar.vikingsea.no): gir klienten window.claude-grensesnittet (db, user, downloads) over Pages Functions.
+// Klienten er bygd med VITE_STATIC=1. Saker lagres i D1 via /api/cases,
 // brukeren er e-posten Cloudflare Access har logget inn, og filer lastes ned i nettleseren.
 (() => {
   // Feilmeldingen fra serveren vises til brukeren (f.eks. at saker ikke kan slettes)

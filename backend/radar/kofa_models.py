@@ -42,8 +42,10 @@ def labelled(con, link_cache: Path | None) -> tuple[pd.DataFrame, pd.DataFrame, 
     extra, linked = [], set()
     if link_cache and link_cache.exists():
         known = {r["id"] for r in con.execute("SELECT id FROM contracts")}
-        for saksnr, v in json.loads(link_cache.read_text()).items():
-            if not v.get("hit") or saksnr in by_case or saksnr not in cases:
+        from .config import settings
+        from .ingest.kofa_link import confident
+        for saksnr, v in confident(json.loads(link_cache.read_text()), settings.kofa_min_confidence).items():
+            if saksnr in by_case or saksnr not in cases:
                 continue
             row = hit_row(v["hit"])
             by_case[saksnr] = row["id"]

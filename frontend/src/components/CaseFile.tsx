@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
+import { STATIC, api, queryClient, useApi, type ContractDetail, type DismissalReason, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { canAssess, saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, isoDatesInText, nok, pct, signedPct } from "../lib/format";
 import { Button, KonkursCheck, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
@@ -41,7 +41,64 @@ function Section({ title, children, right }: { title: string; children: React.Re
   );
 }
 
-function FlagList({ flags }: { flags: Flag[] }) {
+// Revisor avskriver et flagg som falsk positiv, med årsakskode. Logges i saken og teller ikke i prioriteten.
+// Ikke i den statiske versjonen (ingen server å lagre på).
+function Dismiss({ d, f }: { d: ContractDetail; f: Flag }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [scope, setScope] = useState<"kontrakt" | "leverandor">("kontrakt");
+  const reasons = useApi<DismissalReason[]>("/api/dismissal-reasons", {}, { enabled: open });
+  const done = () => queryClient.invalidateQueries();
+  const save = useMutation({
+    mutationFn: () => api(`/api/contracts/${encodeURIComponent(d.id)}/flags/${encodeURIComponent(f.key)}/dismiss`,
+      { method: "POST", body: JSON.stringify({ reason, note, scope }) }),
+    onSuccess: () => { setOpen(false); done(); },
+  });
+  const undo = useMutation({ mutationFn: (id: number) => api(`/api/dismissals/${id}`, { method: "DELETE" }), onSuccess: done });
+  const r = reasons.data?.find((x) => x.code === reason);
+  const label = Object.fromEntries((reasons.data ?? []).map((x) => [x.code, x.label]));
+
+  if (f.dismissed) {
+    const x = f.dismissed;
+    return (
+      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2 pl-5 text-xs text-muted">
+        <span>Avskrevet {date(x.at)} av {x.actor}{x.scope === "leverandor" ? " for leverandøren" : ""}{x.note ? `: ${x.note}` : ""}</span>
+        <button className="underline underline-offset-2 hover:text-ink" disabled={undo.isPending} onClick={() => undo.mutate(x.id)}>Angre</button>
+      </div>
+    );
+  }
+  if (!open) return <button className="mt-1 pl-5 text-xs text-muted underline underline-offset-2 hover:text-ink" onClick={() => setOpen(true)}>Avskriv flagg</button>;
+  return (
+    <div className="mt-2 space-y-2 rounded-md bg-sunk p-2.5 pl-5 text-xs">
+      <label className="block">
+        <span className="text-muted">Årsak</span>
+        <select className="mt-0.5 block w-full rounded-md border border-line bg-surface px-2 py-1 text-sm" value={reason} onChange={(e) => setReason(e.target.value)}>
+          <option value="">Velg årsak</option>
+          {reasons.data?.map((x) => <option key={x.code} value={x.code}>{x.label}</option>)}
+        </select>
+      </label>
+      {r?.supplier_scope && d.winner_ids.length === 1 && (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={scope === "leverandor"} onChange={(e) => setScope(e.target.checked ? "leverandor" : "kontrakt")} />
+          Gjelder leverandøren i alle kontrakter
+        </label>
+      )}
+      <label className="block">
+        <span className="text-muted">Begrunnelse{reason === "annet" ? " (påkrevd)" : ""}</span>
+        <textarea className="mt-0.5 block w-full rounded-md border border-line bg-surface px-2 py-1 text-sm" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      {save.error && <p className="text-hi">{String((save.error as Error).message)}</p>}
+      <div className="flex gap-2">
+        <Button disabled={!reason || (reason === "annet" && !note.trim()) || save.isPending} onClick={() => save.mutate()}>Avskriv</Button>
+        <Button variant="ghost" onClick={() => setOpen(false)}>Avbryt</Button>
+      </div>
+      {label[reason] && <p className="text-muted">Flagget trekkes fra prioriteten og føres i saksloggen.</p>}
+    </div>
+  );
+}
+
+function FlagList({ flags, d }: { flags: Flag[]; d?: ContractDetail }) {
   if (!flags.length) return <p className="text-sm text-muted">Ingen regelbaserte flagg utløst.</p>;
   // Flaggene er observasjoner i kildene, ikke konklusjoner. Datakvalitet teller ikke i prioriteten.
   const groups: [string, string, (f: Flag) => boolean][] = [
@@ -61,15 +118,17 @@ function FlagList({ flags }: { flags: Flag[] }) {
             <div className="mb-1 text-xs text-muted">{label}</div>
             <ul className="space-y-1">
               {fl.map((f) => (
-                <li key={f.key} className={cx("rounded-md border px-3 py-2 text-sm", dq ? "border-dashed border-line text-muted" : "border-line")}>
+                <li key={f.key} className={cx("rounded-md border px-3 py-2 text-sm", dq ? "border-dashed border-line text-muted" : "border-line", f.dismissed && "opacity-70")}>
                   <div className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2"><span className={dq ? "text-muted" : "text-mid"} aria-hidden>{dq ? "○" : "▲"}</span>{f.label}</span>
+                    <span className="flex items-center gap-2"><span className={dq ? "text-muted" : "text-mid"} aria-hidden>{dq ? "○" : "▲"}</span>
+                      <span className={f.dismissed ? "line-through decoration-muted" : ""}>{f.label}</span></span>
                     {!dq && <span className="num shrink-0 text-xs text-muted" title={`Vekt ${f.weight.toLocaleString("nb-NO")}`}>
                       {f.bidrag != null ? `+${f.bidrag.toLocaleString("nb-NO")} poeng` : `vekt ${f.weight.toLocaleString("nb-NO")}`}</span>}
                   </div>
                   {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{isoDatesInText(f.why)}</div>}
                   {f.data_note && <div className="mt-0.5 pl-5 text-xs text-mid">{f.data_note}</div>}
                   {f.checks?.length ? <Checks checks={f.checks} /> : null}
+                  {d && !STATIC && !dq && <Dismiss d={d} f={f} />}
                 </li>
               ))}
             </ul>
@@ -289,7 +348,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
         <p className="rounded-md border border-line p-3 text-xs text-muted">AI-vurdering lages bare for saker med høy prioritet.</p>
       )}
 
-      <Section title="Røde flagg"><FlagList flags={d.flags} /></Section>
+      <Section title="Røde flagg"><FlagList flags={d.flags} d={d} /></Section>
 
       <Section title="Sak">{meta && <CasePanel d={d} statuses={meta.case_statuses} />}</Section>
 

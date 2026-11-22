@@ -15,10 +15,13 @@ import xml.etree.ElementTree as ET
 import httpx
 
 from ..db import tx
+from . import validate
 
 RENHOLD_URL = "https://registerdata.arbeidstilsynet.no/renhold_register.xml"
 BEMANNING_URL = "https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api"
 # CPV-koder der godkjenning kreves
+# Minste forventede antall virksomheter. Renholdsregisteret har flere tusen; langt færre betyr formatendring.
+MIN_ROWS = {"renhold": 1000, "bemanning": 200}
 CPV_PREFIX = {"renhold": ("9091",), "bemanning": ("7962", "7961")}
 
 
@@ -72,7 +75,10 @@ def refresh(con, register: str, url: str, log=print) -> int:
         return 0
     r = httpx.get(url, timeout=120, follow_redirects=True)
     r.raise_for_status()
-    rows = parse(r.content)
+    rows = validate.check(f"Register {register}", parse(r.content), validate.RegisterRow, min_rows=MIN_ROWS.get(register, 0))
+    if not rows:
+        # Ikke tøm et register som fungerte i går fordi feeden plutselig er tom eller har nytt format
+        raise RuntimeError(f"Register {register}: ingen gyldige rader. Beholder forrige versjon.")
     store(con, register, rows)
     log(f"Register {register}: {len(rows)} virksomheter")
     return len(rows)

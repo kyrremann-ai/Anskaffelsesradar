@@ -202,6 +202,76 @@ def test_public_owner_not_shared_and_missing_is_data_quality(tmp_path, con):
     assert "Datakvalitet" in x.supplier(S2)["owners_note"] and "2024" in x.supplier(S2)["owners_note"]
 
 
+def test_validate_drops_bad_rows_and_warns_on_missing_core_field():
+    from radar.ingest import validate
+    validate.current = []
+    rows = [{"orgnr": "123456789", "aar": 2024, "driftsinntekter": None} for _ in range(30)] + [{"orgnr": "12", "aar": 2024}]
+    ok = validate.check("Regnskap", rows, validate.RegnskapRow, core=("driftsinntekter",))
+    assert len(ok) == 30
+    assert any("passet ikke skjemaet" in w for w in validate.current)
+    assert any("«driftsinntekter» mangler" in w for w in validate.current)
+    validate.current = []
+    assert validate.check("Register renhold", [], validate.RegisterRow, min_rows=1000) == []
+    assert "forventet minst 1000" in validate.current[0]
+    validate.current = None
+
+
+def test_register_refresh_keeps_old_data_on_empty_feed(con, monkeypatch):
+    import httpx
+    from radar.ingest import registers
+    registers.store(con, "renhold", [{"orgnr": "123456789", "navn": "Rent AS", "status": "Godkjent"}])
+
+    class R:
+        content = b"<root><annet/></root>"
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: R())
+    with pytest.raises(RuntimeError, match="Beholder forrige"):
+        registers.refresh(con, "renhold", "https://x")
+    assert con.execute("SELECT COUNT(*) FROM registers WHERE register='renhold'").fetchone()[0] == 1
+
+
+def test_source_warning_status_and_row_drop():
+    from radar import pipeline
+    src = {}
+    pipeline._source("Renholdsregisteret", lambda: 40, src, prev={"Renholdsregisteret": {"rows": 5000}})
+    assert src["Renholdsregisteret"]["status"] == "advarsel" and "5000" in src["Renholdsregisteret"]["warnings"][0]
+    pipeline._source("Brreg", lambda: 0, src, "nye siden sist", prev={"Brreg": {"rows": 5000}})
+    assert src["Brreg"]["status"] == "ok"
+
+
+def test_person_salt_guard(con):
+    from radar import db
+    db.check_person_salt(con, "salt-a", "live")
+    db.check_person_salt(con, "salt-a", "live")
+    with pytest.raises(db.SaltMismatch):
+        db.check_person_salt(con, "salt-b", "live")
+    with pytest.raises(db.SaltMismatch, match="ikke satt"):
+        db.check_person_salt(con, "bytt-meg", "live")
+
+
+def test_sqlite_busy_timeout(con):
+    assert con.execute("PRAGMA busy_timeout").fetchone()[0] >= 30000
+    assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+
+
+def test_verify_sources_report_with_mocked_network(monkeypatch):
+    import json as _json
+    import httpx
+    from radar import verify_sources as vs
+    body = (FX / "regnskap.json").read_text(encoding="utf-8")
+    real = httpx.Client
+
+    def client(*a, **k):
+        return real(*a, transport=httpx.MockTransport(lambda req: httpx.Response(200, text=body,
+                                                                                  headers={"content-type": "application/json"})), **k)
+    monkeypatch.setattr(httpx, "Client", client)
+    monkeypatch.setattr(vs, "settings", __import__("dataclasses").replace(vs.settings, renhold_register_url=""))
+    res = vs.run()
+    assert res["Regnskapsregisteret"]["status"] in ("ok", "advarsel") and res["Regnskapsregisteret"]["rows"] == 3
+    assert "Kildesjekk" in vs.report(res)
+    _json.dumps(res, default=str)
+
 # ---------------------------------------------------------------- konkurser hos rolleinnehavere
 
 def test_konkurs_roles_api_only_control_roles_with_birthdate():

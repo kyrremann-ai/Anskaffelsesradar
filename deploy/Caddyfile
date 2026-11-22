@@ -1,12 +1,32 @@
+# Produksjon: innlogging med Microsoft Entra ID (OIDC) via oauth2-proxy. 2FA styres av kundens Entra-policy
+# (betinget tilgang). Brukerens e-post sendes til appen som X-Remote-User og står i saksloggen.
+# Enkel test med passord: CADDYFILE=Caddyfile.basic i .env (se README).
 {$DOMAIN:localhost} {
 	encode gzip
-	basic_auth {
-		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	# Klienten skal aldri kunne sette identiteten selv
+	request_header -X-Remote-User
+	request_header -Remote-User
+
+	handle /oauth2/* {
+		reverse_proxy oauth2-proxy:4180 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Uri {uri}
+		}
 	}
-	# Brukernavnet sendes videre, så saksloggen viser hvem som endret hva
-	reverse_proxy app:8000 {
-		header_up X-Remote-User {http.auth.user.id}
+
+	handle {
+		forward_auth oauth2-proxy:4180 {
+			uri /oauth2/auth
+			header_up X-Real-IP {remote_host}
+			copy_headers X-Auth-Request-Email>X-Remote-User
+			@unauthorized status 401
+			handle_response @unauthorized {
+				redir * /oauth2/sign_in?rd={scheme}://{host}{uri}
+			}
+		}
+		reverse_proxy app:8000
 	}
+
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff

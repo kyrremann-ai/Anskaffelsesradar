@@ -1,7 +1,7 @@
 import { QueryClient, useQuery } from "@tanstack/react-query";
 import { onCasesChange, staticApi } from "./static";
 
-// Bygget som artifact (uten server): data fra JSON-filer, saker i artifactens database
+// Statisk bygg (Cloudflare Pages): data fra JSON-filer, saker i D1 via Pages Functions
 export const STATIC = import.meta.env.VITE_STATIC === "1";
 
 export const queryClient = new QueryClient({
@@ -16,7 +16,10 @@ export type Check = { key: string; label: string; why?: string };
 // checks: alternative forklaringer som er sjekket (leverandørflagg). data_note: hva som mangler i dataene.
 export type FlagCheck = { q: string; status: "ok" | "justert" | "forklarer" | "svekker" | "ukjent"; a: string };
 // bidrag = prioritetspoeng flagget gir (summen av bidragene er prioriteten)
-export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number; checks?: FlagCheck[]; data_note?: string };
+// dismissed: revisor har avskrevet flagget (falsk positiv). Teller ikke i prioriteten.
+export type Dismissal = { id: number; scope: "kontrakt" | "leverandor"; reason: string; note: string; actor: string; at: string; orgnr: string | null };
+export type DismissalReason = { code: string; label: string; supplier_scope: boolean };
+export type Flag = { key: string; label: string; weight: number; source: string; why?: string; bidrag?: number; checks?: FlagCheck[]; data_note?: string; dismissed?: Dismissal };
 
 export type ContractRow = {
   id: string; title: string; pub_date: string; buyer_id: string; buyer: string; region: string; sector: string;
@@ -62,7 +65,7 @@ export type SupplierCard = {
   konkurs_links?: KonkursLink[]; karantene_url?: string;
 };
 export type KonkursLink = { orgnr: string; navn: string; konkursdato: string | null; rolle: string; via: string | null };
-export type SourceStatus = { status: "ok" | "feil" | "av" | "demo"; rows?: number | null; at: string; error?: string; note?: string };
+export type SourceStatus = { status: "ok" | "advarsel" | "feil" | "av" | "demo"; rows?: number | null; at: string; error?: string; note?: string; warnings?: string[] };
 export type CaseEvent = { at: string; actor: string; field: string; old: string | null; new: string | null };
 export type Case = {
   id: number; contract_id: string; title: string; buyer: string; status: string; assignee: string; note: string;

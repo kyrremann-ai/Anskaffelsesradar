@@ -39,7 +39,12 @@ if __name__ == "__main__":
     ap.add_argument("--max-hours", type=float, default=36)
     ap.add_argument("--max-pub-days", type=int, default=10)
     a = ap.parse_args()
-    p = problems(db.connect(settings.db_path), a.max_hours, a.max_pub_days)
+    con = db.connect(settings.db_path)
+    # Advarsler (skjemaavvik, fall i antall rader) gjør ikke jobben rød, men vises i Actions-oppsummeringen
+    for name, s in (db.get_meta(con, "sources") or {}).items():
+        for w in s.get("warnings") or []:
+            print(f"::warning::{w}", flush=True)
+    p = problems(con, a.max_hours, a.max_pub_days)
     for msg in p:
         print(f"::error::{msg}", flush=True)
     if p:

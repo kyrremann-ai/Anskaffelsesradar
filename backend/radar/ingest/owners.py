@@ -26,6 +26,7 @@ from pathlib import Path
 import httpx
 
 from ..db import connect, now, tx
+from . import validate
 
 # ------------------------------------------------------------ aksjonærregisteret
 
@@ -208,14 +209,24 @@ def refresh_proff(con, api_key: str, base_url: str, auth_scheme: str = "Token", 
     for r in con.execute("SELECT winner_ids FROM contracts WHERE source != 'demo'"):
         wanted.update(o for o in json.loads(r["winner_ids"] or "[]") if o and o.isdigit())
     done = {r["orgnr"] for r in con.execute("SELECT DISTINCT orgnr FROM owners WHERE source='proff' AND fetched_at >= date('now','-90 day')")}
-    rows = []
+    rows, ok, empty = [], 0, 0
     with httpx.Client(headers={"Authorization": f"{auth_scheme} {api_key}", "Accept": "application/json"}) as c:
         for o in sorted(wanted - done):
             r = c.get(f"{base_url.rstrip('/')}/companies/register/NO/{o}", timeout=30)
             if r.status_code == 401:
                 raise RuntimeError("Proff avviste nøkkelen (401)")
+            if r.status_code == 429:
+                validate.warn("Proff: rate limit (429). Resten hentes ved neste kjøring.")
+                break
             if r.status_code == 200:
-                rows += [{"orgnr": o, **x} for x in proff_owners(r.json())]
+                ok += 1
+                found = proff_owners(r.json())
+                empty += not found
+                rows += [{"orgnr": o, **x} for x in found]
+    # Proff-feltnavn er ikke bekreftet mot live-API. Mange svar uten eiere tyder på andre feltnavn.
+    if ok >= 20 and empty / ok > 0.9:
+        validate.warn(f"Proff: {empty} av {ok} svar hadde ingen eiere. Feltnavnene i proff_owners stemmer trolig ikke med API-et.")
+    rows = validate.check("Proff API", rows, validate.OwnerRow)
     with tx(con):
         con.executemany("INSERT INTO owners(orgnr, owner_name, owner_orgnr, owner_birth_year, share_pct, source, year, fetched_at) "
                         "VALUES (?,?,?,?,?,'proff',NULL,?)",
