@@ -8,6 +8,7 @@ slik at kontraktsverdien kan sammenlignes med omsetningen i tildelingsåret.
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
@@ -79,6 +80,34 @@ def store(con, rows: list[dict], years: list[dict] | None = None) -> None:
                         [(y["orgnr"], y["aar"], y["type"], y["driftsinntekter"], y["egenkapital"]) for y in years or []])
 
 
+def fetch_one(client: httpx.Client, o: str, retries: int = 3, pause: float = 2.0):
+    """(siste regnskap, alle år) for ett orgnr, eller None når svaret er ukjent.
+
+    Bare 404 betyr «ingen regnskap» og lagres som tom rad (gir flagget «Ingen årsregnskap registrert»).
+    429 og 5xx prøves på nytt og hoppes ellers over uten å lagres, så en midlertidig feil hos Brreg
+    ikke blir et falskt flagg som blir liggende i 90 dager. Kildesjekken fant 500-svar for enkelte orgnr."""
+    for i in range(retries):
+        try:
+            r = client.get(URL.format(orgnr=o), timeout=20)
+        except httpx.HTTPError:
+            time.sleep(pause * 2 ** i)
+            continue
+        if r.status_code == 404:
+            return {"orgnr": o}, []
+        if r.status_code == 429 or r.status_code >= 500:
+            ra = r.headers.get("Retry-After", "")
+            time.sleep(min(float(ra), 60) if ra.replace(".", "", 1).isdigit() else pause * 2 ** i)  # kan også være en dato
+            continue
+        if r.status_code != 200:
+            return None
+        try:
+            body = r.json()
+        except ValueError:
+            return None
+        return parse(o, body) or {"orgnr": o}, parse_years(o, body)
+    return None
+
+
 def refresh(con, user_agent: str, log=print, workers: int = 4) -> int:
     wanted = set()
     for r in con.execute("SELECT winner_ids FROM contracts WHERE source != 'demo'"):
@@ -90,14 +119,7 @@ def refresh(con, user_agent: str, log=print, workers: int = 4) -> int:
     log(f"Regnskap: {len(todo)} orgnr å hente")
 
     def one(client, o):
-        try:
-            r = client.get(URL.format(orgnr=o), timeout=20)
-            if r.status_code != 200:
-                return {"orgnr": o}, []
-            body = r.json()
-            return parse(o, body) or {"orgnr": o}, parse_years(o, body)
-        except (httpx.HTTPError, ValueError):
-            return None
+        return fetch_one(client, o)
 
     with httpx.Client(headers={"Accept": "application/json", "User-Agent": user_agent}) as c, ThreadPoolExecutor(workers) as ex:
         res = [r for r in ex.map(lambda o: one(c, o), todo) if r]
