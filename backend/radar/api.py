@@ -346,12 +346,20 @@ def assess(cid: str):
 
 # ---------------------------------------------------------------- leverandører (Brreg)
 
+# Konkursregisterets oppslag på konkurskarantene (ID-porten). Radaren slår aldri opp selv og lagrer ingenting.
+KARANTENE_URL = "https://konkurskarantene.brreg.no/oppslag"
+
+
 def _supplier_card(bi: BrregIndex, orgnr: str) -> dict:
     e = bi.ent.get(orgnr)
     roles = [dict(r) for r in con.execute(
         "SELECT rolle, rolle_navn, type, navn, person_key FROM brreg_roles WHERE orgnr=? ORDER BY rolle", (orgnr,))]
+    names = {r["person_key"]: r["navn"] for r in roles}
+    # Personnøkkel byttes med navnet fra leverandørens egne roller; konkursselskapenes roller lagres uten navn
+    konkurs = [{k: v for k, v in x.items() if k != "person_key"} | {"via": names.get(x["person_key"])}
+               for x in bi.konkurs_links(orgnr)]
     return {"orgnr": orgnr, "brreg": e, "roles": roles, "brreg_url": f"https://virksomhet.brreg.no/nb/oppslag/enheter/{orgnr}",
-            **extra_index(bi).supplier(orgnr)}
+            "konkurs_links": konkurs, "karantene_url": KARANTENE_URL, **extra_index(bi).supplier(orgnr)}
 
 
 @app.get("/api/suppliers")

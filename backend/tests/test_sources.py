@@ -200,3 +200,49 @@ def test_public_owner_not_shared_and_missing_is_data_quality(tmp_path, con):
     con.execute("DELETE FROM owners WHERE orgnr=?", (S2,))
     x = ExtraIndex(con, brreg.BrregIndex(con).ent)
     assert "Datakvalitet" in x.supplier(S2)["owners_note"] and "2024" in x.supplier(S2)["owners_note"]
+
+
+# ---------------------------------------------------------------- konkurser hos rolleinnehavere
+
+def test_konkurs_roles_api_only_control_roles_with_birthdate():
+    from radar.ingest import brreg_konkurs
+    body = {"rollegrupper": [{"roller": [
+        {"type": {"kode": "DAGL"}, "person": {"navn": {"fornavn": "Per", "etternavn": "Hansen"}, "fodselsdato": "1965"}},
+        {"type": {"kode": "MEDL"}, "person": {"navn": {"fornavn": "Uten", "etternavn": "Dato"}}},
+        {"type": {"kode": "REVI"}, "enhet": {"organisasjonsnummer": "999999999"}},
+        {"type": {"kode": "LEDE"}, "fratraadt": True, "person": {"navn": {"fornavn": "Gått", "etternavn": "Av"}, "fodselsdato": "1970"}},
+    ]}]}
+    rows = brreg_konkurs.roles_from_api("555555555", body, "salt")
+    # Bare personnøkkel lagres, ikke navn; uten fødselsdato blir det ikke kobling
+    assert rows == [("555555555", "DAGL", "Daglig leder", brreg.person_key("Per Hansen", "1965", "salt"))]
+
+
+def test_flag_role_in_bankrupt_company_matches_on_birthdate(con):
+    from radar.ingest import brreg_konkurs
+    brreg_konkurs.load_demo(con, [{"orgnr": "555555555", "navn": "Gamle Vask AS", "konkursdato": "2025-03-01"},
+                                  {"orgnr": "666666666", "navn": "Navnebror AS", "konkursdato": "2025-04-01"}],
+                            [{"orgnr": "555555555", "rolle": "MEDL", "person": "Per Hansen", "fodselsdato": "1965"},
+                             # Samme navn, annen fødselsdato: ikke samme person
+                             {"orgnr": "666666666", "rolle": "DAGL", "person": "Per Hansen", "fodselsdato": "1980"}], "salt")
+    bi = brreg.BrregIndex(con)
+    links = bi.konkurs_links(S2)
+    assert [(x["orgnr"], x["rolle"]) for x in links] == [("555555555", "Styremedlem")]
+    assert bi.konkurs_links(S1) == []
+    c = {"buyer_id": BUYER, "winner_ids": [S2], "pub_date": "2024-10-01", "award_value": 100000.0, "cpv": "90910000"}
+    f = [x for x in bi.flags(c, {S2}) if x["key"] == "brreg_role_bankrupt"]
+    assert len(f) == 1 and "Gamle Vask AS (konkurs 2025-03-01)" in f[0]["why"] and "konkurskarantene" in f[0]["why"]
+
+
+def test_supplier_itself_bankrupt_is_not_a_link(con):
+    from radar.ingest import brreg_konkurs
+    brreg_konkurs.load_demo(con, [{"orgnr": S2, "navn": "Skinnende AS", "konkursdato": "2025-03-01"}],
+                            [{"orgnr": S2, "rolle": "DAGL", "person": "Per Hansen", "fodselsdato": "1965"}], "salt")
+    assert brreg.BrregIndex(con).konkurs_links(S2) == []
+
+
+def test_old_bankruptcies_are_deleted(con):
+    from radar.ingest import brreg_konkurs
+    brreg_konkurs.load_demo(con, [{"orgnr": "555555555", "navn": "Eldgammel AS", "konkursdato": "2015-01-01"}],
+                            [{"orgnr": "555555555", "rolle": "DAGL", "person": "Per Hansen", "fodselsdato": "1965"}], "salt")
+    assert con.execute("SELECT COUNT(*) FROM brreg_konkurs").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM brreg_konkurs_roles").fetchone()[0] == 0

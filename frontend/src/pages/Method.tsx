@@ -163,6 +163,13 @@ export default function Method() {
           </ul>
           <p className="mt-2 text-xs text-muted">Mangler data, sier flagget hva som mangler i stedet for å gjette. Vekten endres ikke av manglende data.</p>
         </Card>
+        <Card title="Konkurs og konkurskarantene" desc="To ulike ting: konkurser hos rolleinnehavere er åpne data, konkurskarantene er det ikke.">
+          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+            <li><b>Rolle i annet selskap under konkursbehandling:</b> daglig leder, styret eller innehaver hos leverandøren har også rolle i et selskap som er registrert med konkurs i Enhetsregisteret. Koblet på navn og full fødselsdato, ikke bare navn. Er en observasjon, ikke en konklusjon. Mange konkurser skyldes forhold ingen kunne styre.</li>
+            <li><b>Dekning:</b> bare konkurser som fortsatt er registrert i Enhetsregisteret. Selskaper som slettes etter bobehandlingen beholdes i radaren fra de først ble sett, i inntil fem år etter konkursdatoen. Rollene i konkursselskapene lagres bare som en personnøkkel (hash), ikke som navn.</li>
+            <li><b>Konkurskarantene:</b> finnes bare i Konkursregisteret, som ikke er åpne data. Oppslag gjøres per person med ID-porten (konkursregisterforskriften § 10). Radaren henter derfor ikke karantenedata, men saksmappen har en lenke der revisoren kan sjekke selv. Radaren lagrer ikke svaret.</li>
+          </ul>
+        </Card>
         <Card title="Aksjonærregisteret" desc="Skatteetatens aksjeeierbok, lastet fra fil. Eierskap per 31.12. hvert år.">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Hva som brukes:</b> eierposter på minst 5 % (aksjeklasser summert), for leverandører og oppdragsgivere i radaren og selskapene som eier dem. To årganger ligger side om side, så både årsskiftet før og etter tildelingen kan sjekkes.</li>

@@ -58,7 +58,10 @@ export type SupplierCard = {
   regnskap: Regnskap | null; owners: Owner[]; owners_indirect?: IndirectOwner[]; owners_note?: string | null;
   registers: Record<string, string>;
   sanctions: { name: string; datasets: string; is_sanction: number } | null;
+  // Andre selskaper under konkursbehandling der en ledende rolleinnehaver også har rolle (navn + fødselsdato)
+  konkurs_links?: KonkursLink[]; karantene_url?: string;
 };
+export type KonkursLink = { orgnr: string; navn: string; konkursdato: string | null; rolle: string; via: string | null };
 export type SourceStatus = { status: "ok" | "feil" | "av" | "demo"; rows?: number | null; at: string; error?: string; note?: string };
 export type CaseEvent = { at: string; actor: string; field: string; old: string | null; new: string | null };
 export type Case = {

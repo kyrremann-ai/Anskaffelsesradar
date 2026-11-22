@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { STATIC, api, queryClient, useApi, type ContractDetail, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { canAssess, saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, isoDatesInText, nok, pct, signedPct } from "../lib/format";
-import { Button, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
+import { Button, KonkursCheck, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
 
 function Md({ text }: { text: string }) {
   return (
@@ -134,6 +134,7 @@ function Supplier({ s }: { s: SupplierCard }) {
           </ul>
         </div>
       )}
+      {s.roles.some((r) => r.type === "person") && <KonkursCheck links={s.konkurs_links} url={s.karantene_url} compact />}
     </div>
   );
 }
