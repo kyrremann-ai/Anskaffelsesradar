@@ -14,7 +14,8 @@ Prioriterer offentlige anskaffelser for kommunerevisjon. Data hentes fra TED, Do
 - **Sporbarhet**: alle endringer på en sak logges med hvem og når. AI-vurderinger lagres med modell, tidspunkt og feltene som ble sendt. Hver sak har et arbeidspapir for utskrift eller PDF.
 - **AI via Mistral (EU)** bak en adapter. Uten nøkkel brukes en regelbasert mal. Personnavn sendes aldri til LLM.
 - **Ingen tredjepart i nettleseren**: ingen Google Fonts, ingen sporingsskript.
-- **Kjører på egen server**: Docker Compose med Caddy (HTTPS og passord) på Hetzner.
+- **Kjører på egen server**: Docker Compose med Caddy (HTTPS) og innlogging med Microsoft Entra ID på Hetzner.
+- **Avskriv flagg**: revisor kan avskrive et flagg som falsk positiv med årsakskode (konsern, rammeavtale, navnelikhet, datafeil, forklart). Avskrevne flagg teller ikke i prioriteten, føres i saksloggen og eksporteres som datasett for å kalibrere vektene.
 
 ## Arkitektur
 
@@ -48,21 +49,9 @@ cd frontend && npm install && npm run dev # http://localhost:5173 (proxy til API
 
 Ekte data: `RADAR_MODE=live python -m radar.pipeline`. Første kjøring henter rundt 7 000 kunngjøringer fra TED og 5 500 orgnr fra Brreg, og tar 20–40 minutter. Etter det hentes bare nye.
 
-## Artifact-versjon (uten server)
-
-Klienten kan bygges som en artifact på claude.ai. Da regner nettleseren ut oversikt og filtre fra JSON-filer, og saker lagres i artifactens delte database.
-
-```bash
-RADAR_MODE=live deploy/build_artifact.sh ut/    # eller RADAR_DEMO=1 for demodata
-```
-
-Publiser `ut/index.html` med alle `*.json` i mappen som filer (`meta.json` og dataene delt i `contracts-N.json` og `cards-N.json`, under grensen på 16 MB per fil), og kapabilitetene `db`, `user` (profile) og `downloads`. En daglig rutine kjører skriptet og publiserer på nytt til samme lenke.
-
-Begrensninger: brukerne må ha tilgang via claude.ai, dataene lagres hos Anthropic, AI-vurdering og Doffin live er av, og arbeidspapir/CSV lastes ned som filer.
-
 ## Demo på radar.vikingsea.no (Cloudflare Pages + Access)
 
-Samme klient og JSON-filer som artifacten, men på eget domene. Bare inviterte e-poster kommer inn (engangskode fra Cloudflare Access, gratis opptil 50 brukere). Saker lagres i Cloudflare D1 via Pages Functions (`deploy/cloudflare/functions`), og loggen viser Access-e-posten til den som endret.
+Klienten bygd statisk (VITE_STATIC=1) med dataene som JSON-filer, på eget domene. Bare inviterte e-poster kommer inn (engangskode fra Cloudflare Access, gratis opptil 50 brukere). Saker lagres i Cloudflare D1 via Pages Functions (`deploy/cloudflare/functions`), og loggen viser Access-e-posten til den som endret.
 
 Engangsoppsett:
 1. Cloudflare API-token med Account: Pages Edit, D1 Edit, Access: Apps and Policies Edit, Access: Audit Logs Read, og Zone (vikingsea.no): DNS Edit + Zone Read.
@@ -82,11 +71,31 @@ Drift (én installasjon per kunde, varsling, sikkerhetskopi med gjenopprettingst
 ## Produksjon (Hetzner)
 
 ```bash
-cp .env.example .env    # fyll inn DOMAIN, BASIC_AUTH_*, PERSON_SALT, ev. MISTRAL_API_KEY og DOFFIN_API_KEY
+cp .env.example .env    # fyll inn DOMAIN, ENTRA_*, OAUTH2_COOKIE_SECRET, PERSON_SALT, ev. MISTRAL_API_KEY og DOFFIN_API_KEY
 docker compose up -d --build
 ```
 
 En CX22 (2 vCPU, 4 GB) holder. Sett `REFRESH_HOURS=24` for daglig oppdatering.
+
+**Innlogging.** Standard er Microsoft Entra ID (OIDC) via oauth2-proxy foran Caddy. De fleste kommuner og revisjonsselskaper har allerede Microsoft 365, så brukerne logger inn med jobbkontoen sin. MFA styres av kundens egen policy for betinget tilgang. E-posten sendes til appen og står i saksloggen og arbeidspapiret. Oppsett:
+
+1. Registrer en app i kundens Entra ID (App registrations). Redirect-URI: `https://<DOMAIN>/oauth2/callback`. Lag en klienthemmelighet.
+2. Fyll inn `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, `OAUTH2_COOKIE_SECRET` og `ALLOWED_EMAIL_DOMAINS` i `.env`.
+3. Krev MFA for appen med betinget tilgang i Entra ID.
+4. `REQUIRE_USER=1` gjør at endringer uten innlogget bruker avvises (401).
+
+Caddy fjerner `X-Remote-User` fra klientens forespørsel før identiteten settes, og appen har ingen åpen port, så identiteten kan ikke forfalskes. For en rask test uten Entra: `COMPOSE_PROFILES=` og `CADDYFILE=Caddyfile.basic` (felles passord, ingen 2FA, ikke for persondata).
+
+**SQLite.** Databasen kjører med WAL og 30 sekunders `busy_timeout`, så nattlig `pipeline.py` og brukere i appen kan skrive samtidig uten låsefeil.
+
+**PERSON_SALT må aldri endres** uten full re-indeksering. Personnøklene (`sha256(navn|fødselsdato|salt)`) kobler samme person på tvers av virksomheter. Med nytt salt får nye roller andre nøkler enn de lagrede, og koblingene brytes uten feilmelding. Pipelinen lagrer derfor et fingeravtrykk av saltet og stopper hvis det endres. Må saltet byttes (f.eks. ved lekkasje):
+
+```bash
+PERSON_SALT=<nytt> python -m radar.reindex_persons --ja   # sletter roller, merker alle enheter som utdatert
+PERSON_SALT=<nytt> python -m radar.pipeline               # henter alle roller på nytt (20–40 min)
+```
+
+Ta vare på saltet sammen med sikkerhetskopien. En gjenopprettet database kan ikke oppdateres videre med et annet salt.
 
 ## Kostnad
 
@@ -105,6 +114,9 @@ En CX22 (2 vCPU, 4 GB) holder. Sett `REFRESH_HOURS=24` for daglig oppdatering.
 | GET | `/api/contracts/export.csv` | CSV (semikolon, norsk desimal) |
 | GET | `/api/suppliers`, `/api/suppliers/{orgnr}` | leverandører, roller, koblinger, regnskap, eiere, registre |
 | GET/POST/PATCH/DELETE | `/api/cases…` | saker med logg |
+| POST | `/api/contracts/{id}/flags/{key}/dismiss` | avskriv flagg (`reason`, `note`, `scope`: kontrakt \| leverandor) |
+| DELETE | `/api/dismissals/{id}` | angre avskrivning (raden beholdes med hvem og når) |
+| GET | `/api/dismissals.csv` | alle avskrivninger med vekt, for kalibrering |
 | GET | `/api/cases/{id}/arbeidspapir` | utskriftsvennlig arbeidspapir |
 | GET | `/api/doffin/latest?q=` | Doffin live |
 | GET | `/api/model` | modellytelse, viktigste felt, vekter |
@@ -112,7 +124,11 @@ En CX22 (2 vCPU, 4 GB) holder. Sett `REFRESH_HOURS=24` for daglig oppdatering.
 
 ## Tilleggskilder
 
-Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ikke de andre, og status vises på metodesiden. Flaggene gir et tillegg i prioriteten (se `radar/enrich.py`).
+Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ikke de andre, og status vises på metodesiden.
+
+Alle rader valideres med Pydantic før de lagres (`radar/ingest/validate.py`). Kilden får status «Hentet, med avvik» og en advarsel på metodesiden og i `radar.check` når rader ikke passer skjemaet, når et kjernefelt mangler i nesten alle rader (typisk omdøpt felt hos kilden), når en hel feed gir langt færre rader enn forrige gang, eller når Proff svarer uten eiere. En tom eller omformatert feed tømmer ikke registeret som fungerte i går.
+
+**OpenSanctions og PEP.** EU- og FN-listene er åpne uten kommersielle begrensninger, men dekker bare sanksjoner, ikke PEP. Uten OpenSanctions-lisens forsvinner derfor PEP-flagget. Det finnes ikke noe åpent norsk PEP-register. Flaggene gir et tillegg i prioriteten (se `radar/enrich.py`).
 
 | Kilde | Hvordan | Tilgang | Flagg |
 |---|---|---|---|
@@ -124,7 +140,7 @@ Hver kilde kjøres for seg ved «Hent nye data». En kilde som feiler stopper ik
 | Renholdsregisteret | `RENHOLD_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på renhold (CPV 9091) ikke godkjent |
 | Bemanningsregisteret | `BEMANNING_REGISTER_URL` | Åpent (NLOD) | leverandør på vikar/bemanning (CPV 7962) ikke godkjent |
 | Kandidatlister (valg.no) | Fil i `data/import/kandidat*.csv` | Åpent | mulig kobling til lokalpolitiker (navn + fødselsår, samme kommune) |
-| OpenSanctions | `OPENSANCTIONS_URL` | CC BY-NC: lisens kreves ved salg | sanksjonert selskap/person, PEP blant roller/eiere |
+| OpenSanctions | `OPENSANCTIONS_URL` + `OPENSANCTIONS_LISENS` | CC BY-NC. All bruk i kommersiell virksomhet krever lisens, også compliance-screening. Av som standard; kunden tar med egen lisens | sanksjonert selskap/person, PEP blant roller/eiere |
 | KOFA | Fil i `data/import/kofa*.csv` eller `.json`, lages med `python -m radar.ingest.kofa_scrape` | Offentlige avgjørelser (åvl. § 14) | konstatert brudd. Koblede saker brukes som ekte fasit i treningen (fra 30 per klasse) |
 
 KOFA-skraperen henter fra klagenemndssekretariatet.no (www.klagenemndssekretariatet.no må være tillatt i nettverket). Den følger robots.txt, venter 3 sek mellom kall og cacher sidene i `data/cache/kofa/`. Saker uten realitetsavgjørelse (avvist, trukket) tas ikke med. `python -m radar.ingest.kofa_link` kobler sakene til Doffin-kunngjøringer (også konkurranser uten tildeling), og `python -m radar.kofa_models` sammenligner modellvalg med kryssvalidert AUC og 95 % konfidensintervall. `python -m radar.klagerisiko hent|test` måler **klagerisiko**: hvor sannsynlig det er at en konkurranse havner i KOFA (ikke korrupsjonsrisiko). Mål modellene mot KOFA-fasiten med `python -m radar.kofa_eval`: AUC for syntetisk modell testet på KOFA, modell trent bare på KOFA (CV) og begge sammen.
@@ -135,9 +151,10 @@ Personvern: kandidatlister, PEP og personlige eiere er personopplysninger. Treff
 
 ## Kjente begrensninger
 
-- Klagerisiko er trent på KOFA-saker koblet til Doffin med navnesøk. Kommuner er lettere å koble enn statlige etater, så kommune-effekten kan være delvis kunstig.
+- Klagerisiko er trent på KOFA-saker koblet til Doffin. Koblingen har en konfidens (oppdragsgivers orgnr fra Enhetsregisteret, navn, ordoverlapp, tid og Doffin-ID i teksten), og bare koblinger med konfidens ≥ `KOFA_MIN_CONFIDENCE` (0,7) brukes i treningen. Navnesøk alene ga en delvis kunstig kommune-effekt, fordi kommuner har entydige navn og statlige etater ikke har det. Lagrede koblinger fra før konfidens fantes: `python -m radar.ingest.kofa_link --rescore`, så `python -m radar.klagerisiko eksporter`. KOFA oppgir ikke CPV, så CPV inngår ikke i koblingen.
 - Rammeavtaler oppgir ofte maksverdi. Overskridelsesflagget får derfor halv vekt på rammeavtaler.
 - Leverandørflaggene (omsetning, ansatte, adresse, roller, eiere) sjekkes mot alternative forklaringer før de vises: se `radar/supplier_context.py` og testplanen i `docs/testplan-leverandorflagg.md`. Brregs endringslogg har detaljer om hva som endret seg bare for nyere endringer (fra ca. 2026), og rollefeeden sier bare *at* roller endret seg. Fusjon og fisjon finnes ikke i det åpne API-et og må legges inn som fil.
 - Reelle rettighetshavere er ikke åpent. Eierskap dekkes av Aksjonærregisteret (årlig fil, ett år gammel) og eventuelt Proff API.
-- Adapterne for Regnskapsregisteret, Arbeidstilsynet, OpenSanctions og Proff er testet mot fixtures, ikke mot live-tjenestene. Proff-feltnavn må bekreftes mot deres dokumentasjon når avtalen er på plass.
-- Matching av personer på tvers av virksomheter bruker navn og fødselsdato (hashet med salt).
+- Adapterne for Regnskapsregisteret, Arbeidstilsynet, OpenSanctions og Proff er testet mot fixtures. Kjør Actions → «Kildesjekk» for en verifisering mot live-tjenestene (rapporten viser antall rader, skjemaavvik og eksempelfelt per kilde). Proff-feltnavn må bekreftes mot deres dokumentasjon når avtalen er på plass.
+- Matching av personer på tvers av virksomheter bruker navn og fødselsdato (hashet med salt). Se «PERSON_SALT må aldri endres» over.
+- Avskrivninger justerer ikke vektene automatisk. Revisorer avskriver også ubeleilige funn, så vektene bør endres etter en manuell gjennomgang av `dismissals.csv`.

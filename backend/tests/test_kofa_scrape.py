@@ -111,3 +111,38 @@ def test_klagerisiko(tmp_path):
     r = kr.evaluate(tmp_path / "l.json", tmp_path / "s.json")
     assert r["positive"] == 40 and r["models"][0]["auc"] > 0.7
     assert "AUC siste år" in kr.table(r)
+
+
+def test_link_confidence_orgnr_reference_and_threshold():
+    from radar.ingest import kofa_link as kl
+    hit = {"id": "2024-105123", "buyer": [{"name": "Testby kommune", "organizationId": "944444444"}],
+           "heading": "Renholdstjenester", "issueDate": "2024-03-01T00:00:00Z"}
+    case = {"innklaget": "Testby kommune", "innklaget_orgnr": "944444444", "dato": "2025-01-10",
+            "tittel": "Anskaffelse av renholdstjenester."}
+    c, why = kl.confidence(hit, case, 1.0)
+    assert c == 0.95 and "oppdragsgiver (orgnr)" in why
+    # Bare delvis navnelikhet og svak gjenstand: under terskel
+    weak = {**hit, "buyer": [{"name": "Testby kommune eiendom"}]}
+    assert kl.confidence(weak, {**case, "innklaget_orgnr": ""}, 0.3)[0] < 0.7
+    # Doffin-ID i teksten = sikker
+    assert kl.confidence(weak, {**case, "tittel": "Konkurransen (2024-105123) gjaldt renhold"}, 0.0)[0] == 1.0
+    links = {"a": {"hit": hit, "confidence": 0.95}, "b": {"hit": weak, "confidence": 0.4}, "c": {"hit": None, "confidence": 0}}
+    assert set(kl.confident(links, 0.7, log=lambda *_: None)) == {"a"}
+    assert set(kl.confident({"x": {"hit": hit, "score": 1}}, 0.7, log=lambda *_: None)) == {"x"}  # gamle koblinger
+
+
+def test_resolve_orgnr_only_on_unique_exact_name():
+    import httpx
+    from radar.ingest import kofa_link as kl
+
+    def handler(req):
+        n = req.url.params["navn"]
+        ents = {"Testby kommune": [{"navn": "TESTBY KOMMUNE", "organisasjonsnummer": "944444444"}],
+                "Dobbel AS": [{"navn": "Dobbel AS", "organisasjonsnummer": "1"}, {"navn": "DOBBEL AS", "organisasjonsnummer": "2"}]}
+        return httpx.Response(200, json={"_embedded": {"enheter": ents.get(n, [])}})
+    cache = {}
+    with httpx.Client(transport=httpx.MockTransport(handler)) as c:
+        assert kl.resolve_orgnr(c, "Testby kommune", cache) == "944444444"
+        assert kl.resolve_orgnr(c, "Dobbel AS", cache) is None
+        assert kl.resolve_orgnr(c, "Ukjent etat", cache) is None
+    assert cache["testby kommune"] == "944444444"

@@ -1,5 +1,7 @@
 # Hetzner VPS: docker compose up -d --build
-# Caddy gir HTTPS (Let's Encrypt) og innlogging med passord foran appen.
+# Caddy gir HTTPS (Let's Encrypt). Innlogging: Microsoft Entra ID via oauth2-proxy (standard),
+# eller felles passord for test (CADDYFILE=Caddyfile.basic og COMPOSE_PROFILES= tom i .env).
+# Appen eksponerer ingen port: alt går gjennom Caddy, som setter X-Remote-User fra innloggingen.
 services:
   app:
     build: .
@@ -8,12 +10,38 @@ services:
       - radar-data:/data
     restart: unless-stopped
 
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    profiles: [oidc]
+    env_file: .env
+    environment:
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: https://login.microsoftonline.com/${ENTRA_TENANT_ID}/v2.0
+      OAUTH2_PROXY_CLIENT_ID: ${ENTRA_CLIENT_ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET}
+      OAUTH2_PROXY_REDIRECT_URL: https://${DOMAIN}/oauth2/callback
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_COOKIE_SECRET}
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_COOKIE_EXPIRE: 8h
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-*}
+      # Entra-tokens har ikke alltid email/email_verified; preferred_username er UPN (e-postformat)
+      OAUTH2_PROXY_OIDC_EMAIL_CLAIM: preferred_username
+      OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "true"
+      OAUTH2_PROXY_SCOPE: openid email profile
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_UPSTREAMS: static://202
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+    restart: unless-stopped
+
   caddy:
     image: caddy:2.8-alpine
     ports: ["80:80", "443:443"]
     env_file: .env
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
     depends_on: [app]
     restart: unless-stopped

@@ -1,0 +1,20 @@
+# Bare for test og demo: ett felles passord, ingen 2FA, og saksloggen viser bare brukernavnet.
+# Produksjon bruker deploy/Caddyfile (Entra ID).
+{$DOMAIN:localhost} {
+	encode gzip
+	request_header -X-Remote-User
+	request_header -Remote-User
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+	# Brukernavnet sendes videre, så saksloggen viser hvem som endret hva
+	reverse_proxy app:8000 {
+		header_up X-Remote-User {http.auth.user.id}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+}

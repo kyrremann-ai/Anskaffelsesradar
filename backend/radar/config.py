@@ -44,9 +44,16 @@ class Settings:
     proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
     renhold_register_url: str = field(default_factory=lambda: _env("RENHOLD_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/renhold_register.xml"))
     bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL"))  # API-et svarer 403 uten nøkkel (okt. 2026)
-    # OpenSanctions er CC BY-NC: krever lisens ved kommersiell bruk. Av som standard.
+    # OpenSanctions er CC BY-NC: all bruk i kommersiell virksomhet krever lisens, også compliance-screening. Av som standard.
     opensanctions_url: str = field(default_factory=lambda: _env("OPENSANCTIONS_URL"))
     opensanctions_api_key: str = field(default_factory=lambda: _env("OPENSANCTIONS_API_KEY"))
+    # Må settes for at OpenSanctions skal hentes: «ikke-kommersiell» (f.eks. intern bruk i en kommune som ikke selger
+    # tjenesten videre, avklart med OpenSanctions) eller «kommersiell» (kunden har egen lisens). Tom = av.
+    opensanctions_license: str = field(default_factory=lambda: _env("OPENSANCTIONS_LISENS").strip().lower())
+    # Krev innlogget bruker (header fra oauth2-proxy/Caddy) for endringer i saker og flagg. Settes i produksjon.
+    require_user: bool = field(default_factory=lambda: _env("REQUIRE_USER", "0") == "1")
+    # Klagerisiko trenes bare på KOFA-koblinger med minst denne konfidensen (0–1, se ingest.kofa_link)
+    kofa_min_confidence: float = field(default_factory=lambda: float(_env("KOFA_MIN_CONFIDENCE", "0.7")))
     seed: int = 42
 
     @property

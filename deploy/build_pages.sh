@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bygger Cloudflare Pages-versjonen (radar.vikingsea.no): samme klient og JSON-filer som artifacten,
+# Bygger Cloudflare Pages-versjonen (radar.vikingsea.no): klienten bygd statisk (VITE_STATIC=1) med data som JSON-filer,
 # men saker lagres i D1 via Pages Functions, og innlogging går gjennom Cloudflare Access.
 #   RADAR_MODE=live deploy/build_pages.sh ut-pages/      # eller RADAR_DEMO=1 for demodata
 #   python deploy/cf_radar.py deploy ut-pages/

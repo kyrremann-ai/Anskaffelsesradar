@@ -15,6 +15,7 @@ import re
 import httpx
 
 from ..db import norm_name, tx
+from . import validate
 
 URL = "https://data.opensanctions.org/datasets/latest/default/targets.simple.csv"
 
@@ -48,10 +49,23 @@ def refresh(con, url: str = URL, api_key: str = "", log=print) -> int:
     headers = {"Authorization": f"ApiKey {api_key}"} if api_key else {}
     with httpx.stream("GET", url, headers=headers, timeout=600, follow_redirects=True) as r:
         r.raise_for_status()
-        rows = parse_lines(io.TextIOWrapper(_Iter(r.iter_bytes()), encoding="utf-8"))
+        text = io.TextIOWrapper(_Iter(r.iter_bytes()), encoding="utf-8")
+        header = next(csv.reader([text.readline()]), [])
+        missing = {"id", "name", "countries", "identifiers", "sanctions"} - set(header)
+        if missing:
+            raise RuntimeError(f"OpenSanctions: kolonner mangler i CSV-en ({', '.join(sorted(missing))}). Formatet er endret.")
+        rows = parse_lines(_prepend(",".join(header), text))
+    rows = validate.check("OpenSanctions", rows, validate.SanctionRow, min_rows=10)
+    if not rows:
+        raise RuntimeError("OpenSanctions: ingen gyldige norske oppføringer. Beholder forrige versjon.")
     store(con, rows)
     log(f"OpenSanctions: {len(rows)} norske oppføringer")
     return len(rows)
+
+
+def _prepend(first: str, rest):
+    yield first + "\n"
+    yield from rest
 
 
 class _Iter(io.RawIOBase):

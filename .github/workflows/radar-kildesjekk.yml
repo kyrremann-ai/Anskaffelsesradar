@@ -1,0 +1,29 @@
+# Verifiserer tilleggskildene mot live-tjenestene: antall rader, skjemaavvik og eksempelfelt per kilde.
+# Kjøres for hånd og hver mandag, så en stille formatendring hos en kilde oppdages tidlig.
+name: Kildesjekk
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 6 * * 1"
+permissions:
+  contents: read
+jobs:
+  sjekk:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    env:
+      BRREG_USER_AGENT: "Anskaffelsesradar/2.0 (kildesjekk; github.com/${{ github.repository }})"
+      PROFF_API_KEY: ${{ secrets.PROFF_API_KEY }}
+      BEMANNING_REGISTER_URL: ${{ vars.BEMANNING_REGISTER_URL }}
+      # OpenSanctions sjekkes bare når lisensen er avklart (variabel i repoet)
+      OPENSANCTIONS_LISENS: ${{ vars.OPENSANCTIONS_LISENS }}
+      OPENSANCTIONS_API_KEY: ${{ secrets.OPENSANCTIONS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: python -m radar.verify_sources --json kildesjekk.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: kildesjekk, path: backend/kildesjekk.json, retention-days: 30 }

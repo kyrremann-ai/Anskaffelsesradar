@@ -6,7 +6,16 @@ gjenstanden fra sammendraget, i tre år før avgjørelsen. Beste treff hos samme
 velges, med tildeling foran konkurranse. Resultatet caches i data/cache/kofa_doffin.json og
 brukes av kofa_eval (konkurransekunngjøringer gir estimat, frist og prosedyre, men ikke tilbud).
 
-    python -m radar.ingest.kofa_link [--since 2024-01-01]
+Hver kobling får en konfidens (0–1) fra flere uavhengige signaler, så klagerisiko kan trenes bare på sikre treff:
+- oppdragsgiver: samme orgnr (innklagedes orgnr slås opp i Enhetsregisteret når KOFA ikke oppgir det),
+  ellers likt eller delvis likt navn. Navnesøk alene ga kunstig høy kommune-effekt: kommuner har entydige navn,
+  statlige etater har ikke.
+- gjenstand: ordoverlapp mellom sammendraget og kunngjøringens overskrift
+- tid: hvor lenge før avgjørelsen kunngjøringen kom (de fleste klager avgjøres innen to år)
+- referanse: Doffin-ID-en står i KOFA-teksten (sikker kobling)
+
+    python -m radar.ingest.kofa_link [--since 2024-01-01] [--no-brreg]
+    python -m radar.ingest.kofa_link --rescore      # ny konfidens for lagrede koblinger, uten nye Doffin-kall
 """
 from __future__ import annotations
 
@@ -53,6 +62,67 @@ def _buyer_ok(hit: dict, innklaget: str) -> bool:
     return False
 
 
+def _buyer_match(hit: dict, case: dict) -> tuple[float, str]:
+    """Hvor sikkert oppdragsgiveren i kunngjøringen er den innklagede: (poeng, grunnlag)."""
+    org = re.sub(r"\D", "", str(case.get("innklaget_orgnr") or ""))
+    buyers = hit.get("buyer") or []
+    if len(org) == 9 and any(re.sub(r"\D", "", str(b.get("organizationId") or "")) == org for b in buyers):
+        return 0.45, "orgnr"
+    kn = norm_name(case.get("innklaget"))
+    if kn and any(norm_name(b.get("name")) == kn for b in buyers):
+        return 0.35, "navn"
+    return (0.2, "delvis navn") if _buyer_ok(hit, case.get("innklaget") or "") else (0.0, "")
+
+
+def confidence(hit: dict | None, case: dict, subject_score: float) -> tuple[float, list[str]]:
+    """Konfidens for at kunngjøringen er den KOFA-saken gjelder. Terskel for trening: KOFA_MIN_CONFIDENCE (0,7).
+    Eksempler: orgnr + noe ordoverlapp + under to år = 0,7. Bare delvis navnelikhet krever full ordoverlapp."""
+    if not hit:
+        return 0.0, []
+    text = f"{case.get('tittel') or ''} {case.get('url') or ''}"
+    hid = str(hit.get("id") or "")
+    if re.fullmatch(r"20\d\d-\d{4,}", hid) and re.search(rf"(?<![\d-]){re.escape(hid)}(?!\d)", text):
+        return 1.0, ["Doffin-ID i KOFA-teksten"]
+    b, basis = _buyer_match(hit, case)
+    if not b:
+        return 0.0, []
+    out, why = b, [f"oppdragsgiver ({basis})"]
+    subj = max(0.0, min(1.0, subject_score))
+    out += 0.35 * subj
+    why.append(f"gjenstand {subj:.0%}")
+    try:
+        days = (date.fromisoformat(case["dato"][:10]) - date.fromisoformat(str(hit.get("issueDate"))[:10])).days
+    except (KeyError, TypeError, ValueError):
+        days = None
+    if days is not None and 0 <= days <= 730:
+        out += 0.15
+        why.append("under 2 år før avgjørelsen")
+    elif days is not None and 730 < days <= 3 * 365:
+        out += 0.05
+        why.append("2–3 år før avgjørelsen")
+    return round(min(out, 1.0), 2), why
+
+
+def resolve_orgnr(client: httpx.Client, name: str, cache: dict) -> str | None:
+    """Innklagedes orgnr fra Enhetsregisteret: bare ved eksakt navnelikhet (normalisert), ellers ingen."""
+    key = norm_name(name)
+    if not key:
+        return None
+    if key in cache:
+        return cache[key]
+    org = None
+    try:
+        r = client.get("https://data.brreg.no/enhetsregisteret/api/enheter", params={"navn": name, "size": 20}, timeout=20)
+        if r.status_code == 200:
+            hits = [e for e in (r.json().get("_embedded") or {}).get("enheter", []) if norm_name(e.get("navn")) == key]
+            if len(hits) == 1:  # flere med samme navn: ikke gjett
+                org = hits[0].get("organisasjonsnummer")
+    except (httpx.HTTPError, ValueError):
+        return None  # ikke cache nettfeil
+    cache[key] = org
+    return org
+
+
 def best_hit(hits: list[dict], case: dict) -> tuple[dict | None, float]:
     kt = tokens(subject(case["tittel"]))
     best, score = None, 0.0
@@ -71,12 +141,18 @@ def best_hit(hits: list[dict], case: dict) -> tuple[dict | None, float]:
     return best, score
 
 
-def link(cases: list[dict], cache: Path, api_key: str = "", min_score: float = 0.5, log=print) -> dict[str, dict]:
+def link(cases: list[dict], cache: Path, api_key: str = "", min_score: float = 0.5, log=print,
+         brreg_lookup: bool = True) -> dict[str, dict]:
     out: dict[str, dict] = json.loads(cache.read_text()) if cache.exists() else {}
-    with httpx.Client(headers=doffin._headers(api_key)) as client:
+    org_cache_path = cache.with_name("kofa_orgnr.json")
+    org_cache: dict = json.loads(org_cache_path.read_text()) if org_cache_path.exists() else {}
+    with httpx.Client(headers=doffin._headers(api_key)) as client, \
+            httpx.Client(headers={"Accept": "application/json", "User-Agent": "Anskaffelsesradar/2.0"}) as brreg_client:
         for i, c in enumerate(cases, 1):
             if c["saksnr"] in out or not c.get("tittel"):
                 continue
+            if brreg_lookup and not c.get("innklaget_orgnr"):
+                c = {**c, "innklaget_orgnr": resolve_orgnr(brreg_client, c.get("innklaget") or "", org_cache) or ""}
             d = date.fromisoformat(c["dato"])
             span = {"numHitsPerPage": 100, "issueDateTo": d.isoformat(), "issueDateFrom": (d - timedelta(days=3 * 365)).isoformat()}
             words = sorted(tokens(subject(c["tittel"])), key=len, reverse=True)
@@ -88,12 +164,51 @@ def link(cases: list[dict], cache: Path, api_key: str = "", min_score: float = 0
                 h, s = best_hit(j.get("hits") or [], c)
                 if s >= min_score:
                     break
-            out[c["saksnr"]] = {"score": round(s, 2), "hit": h if s >= min_score else None}
+            conf, why = confidence(h if s >= min_score else None, c, s)
+            out[c["saksnr"]] = {"score": round(s, 2), "hit": h if s >= min_score else None, "confidence": conf, "basis": why,
+                                "innklaget_orgnr": c.get("innklaget_orgnr") or None}
             if i % 25 == 0:
                 cache.write_text(json.dumps(out, ensure_ascii=False))
+                org_cache_path.write_text(json.dumps(org_cache, ensure_ascii=False))
                 log(f"  {i}/{len(cases)}: {sum(1 for v in out.values() if v['hit'])} koblet")
     cache.write_text(json.dumps(out, ensure_ascii=False))
+    org_cache_path.write_text(json.dumps(org_cache, ensure_ascii=False))
     return out
+
+
+def rescore(cases: list[dict], cache: Path, brreg_lookup: bool = True) -> dict[str, dict]:
+    """Ny konfidens for koblinger som allerede er lagret (f.eks. fra før konfidens fantes). Ingen nye Doffin-kall."""
+    out = json.loads(cache.read_text())
+    by_nr = {c["saksnr"]: c for c in cases}
+    org_cache_path = cache.with_name("kofa_orgnr.json")
+    org_cache: dict = json.loads(org_cache_path.read_text()) if org_cache_path.exists() else {}
+    with httpx.Client(headers={"Accept": "application/json", "User-Agent": "Anskaffelsesradar/2.0"}) as bc:
+        for nr, v in out.items():
+            c = by_nr.get(nr)
+            if not c or not v.get("hit"):
+                continue
+            if brreg_lookup and not c.get("innklaget_orgnr"):
+                c = {**c, "innklaget_orgnr": resolve_orgnr(bc, c.get("innklaget") or "", org_cache) or ""}
+            _, s = best_hit([v["hit"]], c)
+            v["confidence"], v["basis"] = confidence(v["hit"], c, s or v.get("score", 0))
+            v["innklaget_orgnr"] = c.get("innklaget_orgnr") or None
+    cache.write_text(json.dumps(out, ensure_ascii=False))
+    org_cache_path.write_text(json.dumps(org_cache, ensure_ascii=False))
+    return out
+
+
+def confident(link_cache: dict, min_confidence: float, log=print) -> dict[str, dict]:
+    """Koblinger som er sikre nok til trening. Lagrede koblinger uten konfidens (fra før) brukes bare når
+    ingen har konfidens ennå, med advarsel: kjør --rescore."""
+    scored = {k: v for k, v in link_cache.items() if v.get("hit") and "confidence" in v}
+    if not scored:
+        legacy = {k: v for k, v in link_cache.items() if v.get("hit")}
+        if legacy:
+            log(f"KOFA-koblinger uten konfidens ({len(legacy)}): brukes alle. Kjør python -m radar.ingest.kofa_link --rescore.")
+        return legacy
+    keep = {k: v for k, v in scored.items() if v["confidence"] >= min_confidence}
+    log(f"KOFA-koblinger: {len(keep)} av {len(scored)} har konfidens ≥ {min_confidence:g}")
+    return keep
 
 
 def hit_row(h: dict) -> dict:
@@ -113,8 +228,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--kofa", type=Path, default=settings.import_dir / "kofa.csv")
     ap.add_argument("--since", default="2024-01-01")
+    ap.add_argument("--rescore", action="store_true", help="ny konfidens for lagrede koblinger")
+    ap.add_argument("--no-brreg", action="store_true", help="ikke slå opp innklagedes orgnr i Enhetsregisteret")
     a = ap.parse_args()
     rows = [r for r in csv.DictReader(a.kofa.open(encoding="utf-8"), delimiter=";") if r["dato"] >= a.since]
-    res = link(rows, settings.data_dir / "cache" / "kofa_doffin.json", settings.doffin_api_key)
-    n = [v for k, v in res.items() if v["hit"]]
-    print(f"Koblet {len(n)} av {len(res)} saker til Doffin")
+    cache = settings.data_dir / "cache" / "kofa_doffin.json"
+    res = rescore(rows, cache, not a.no_brreg) if a.rescore else link(rows, cache, settings.doffin_api_key, brreg_lookup=not a.no_brreg)
+    n = [v for v in res.values() if v.get("hit")]
+    sure = [v for v in n if v.get("confidence", 0) >= settings.kofa_min_confidence]
+    print(f"Koblet {len(n)} av {len(res)} saker til Doffin, {len(sure)} med konfidens ≥ {settings.kofa_min_confidence:g}")

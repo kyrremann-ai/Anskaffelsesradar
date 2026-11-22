@@ -15,7 +15,7 @@ const KR_LABELS: Record<string, string> = {
   "buyer_innkjøpssamarbeid": "Innkjøpssamarbeid", buyer_stat: "Statlig virksomhet",
 };
 const STATUS: Record<string, [string, string]> = {
-  ok: ["Hentet", "text-lo"], demo: ["Demodata", "text-mid"], av: ["Ikke satt opp", "text-muted"], feil: ["Feil", "text-hi"],
+  ok: ["Hentet", "text-lo"], advarsel: ["Hentet, med avvik", "text-mid"], demo: ["Demodata", "text-mid"], av: ["Ikke satt opp", "text-muted"], feil: ["Feil", "text-hi"],
 };
 const w1 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const f3 = (v: number) => v.toLocaleString("nb-NO", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -101,7 +101,7 @@ export default function Method() {
           <p className="mt-2 text-sm text-muted"><b>Prioritet er en relativ rangering, ikke en sannsynlighet.</b> Høy = topp 5 % nasjonalt, forhøyet = persentil 80–95. Også et datasett med bare uproblematiske anskaffelser har en topp 5 %, så nivået sier hva som bør sjekkes først, ikke at noe er galt.</p>
           <p className="mt-2 text-sm text-muted">
             <b>AI-vurdering:</b> {STATIC
-              ? "I denne demoen skriver Claude (Anthropic) vurderingen. For saker med høy prioritet lages den hver natt og vises med dato; i artifacten kan brukeren også be om en ny på sin egen Claude-konto."
+              ? "I denne demoen skriver Claude (Anthropic) vurderingen. For saker med høy prioritet lages den hver natt og vises med dato."
               : "Skrives av språkmodellen som er satt opp på serveren (Mistral i EU eller Claude)."} Modellen får bare
             kontraktsfelt og flagg, aldri personnavn fra registrene. Vurderingen er beslutningsstøtte, ikke en konklusjon.
           </p>
@@ -123,6 +123,7 @@ export default function Method() {
                   <span className={STATUS[s.status]?.[1]}>{STATUS[s.status]?.[0] ?? s.status}</span>
                   {s.rows != null && <span className="num ml-2 text-muted">{s.rows.toLocaleString("nb-NO")} rader</span>}
                   {s.error && <span className="block text-hi" title={s.error}>{s.error.slice(0, 60)}</span>}
+                  {s.warnings?.map((w) => <span key={w} className="block max-w-xs text-mid">{w}</span>)}
                   <span className="block text-muted">{dateTime(s.at)}</span>
                 </span>
               </li>))}
