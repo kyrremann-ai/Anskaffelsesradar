@@ -9,6 +9,7 @@ export default {
         line: "var(--line)", accent: "var(--accent)", "accent-soft": "var(--accent-soft)", ink: "var(--ink)",
         "ink-fg": "var(--ink-fg)", hi: "var(--hi)", "hi-soft": "var(--hi-soft)", mid: "var(--mid)",
         "mid-soft": "var(--mid-soft)", lo: "var(--lo)", "lo-soft": "var(--lo-soft)",
+        shell: "var(--shell)", "shell-fg": "var(--shell-fg)", "shell-muted": "var(--shell-muted)", "shell-line": "var(--shell-line)",
       },
       fontFamily: {
         sans: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],

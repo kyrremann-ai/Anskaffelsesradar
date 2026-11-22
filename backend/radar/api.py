@@ -217,8 +217,8 @@ def summary(buyers: str | None = None):
     counts: dict[str, list] = {}
     for fl in df["flags"]:
         for f in fl:
-            counts.setdefault(f["key"], [f["label"].split(" (")[0], 0])[1] += 1
-    out["flag_counts"] = sorted(({"key": k, "label": v[0], "n": v[1]} for k, v in counts.items()), key=lambda d: -d["n"])
+            counts.setdefault(f["key"], [f["label"].split(" (")[0], 0, f.get("source")])[1] += 1
+    out["flag_counts"] = sorted(({"key": k, "label": v[0], "n": v[1], "source": v[2]} for k, v in counts.items()), key=lambda d: -d["n"])
     out["by_sector"] = _group(df, "sector")
     out["by_region"] = _group(df, "region")
     out["by_buyer"] = _group(df, "buyer_id", min_n=1 if buyers else 8, name_col="buyer")

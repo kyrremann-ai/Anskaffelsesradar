@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { STATIC, api, queryClient, useApi, type ContractDetail, type DismissalReason, type Flag, type FlagCheck, type Meta, type SupplierCard } from "../lib/api";
 import { canAssess, saveWorkpaper } from "../lib/static";
 import { date, dateTime, int, isoDatesInText, nok, pct, signedPct } from "../lib/format";
-import { Button, KonkursCheck, Meter, Skeleton, TierBadge, cx, tierColor } from "./ui";
+import { Button, Icon, KonkursCheck, ScoreStrip, Skeleton, SOURCE_COLOR, SOURCE_LABEL, TierBadge, cx, sourceKey, tierColor } from "./ui";
 
 function Md({ text }: { text: string }) {
   return (
@@ -32,8 +32,8 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 function Section({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{title}</h3>
         {right}
       </div>
       {children}
@@ -62,15 +62,15 @@ function Dismiss({ d, f }: { d: ContractDetail; f: Flag }) {
   if (f.dismissed) {
     const x = f.dismissed;
     return (
-      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2 pl-5 text-xs text-muted">
+      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2 text-xs text-muted">
         <span>Avskrevet {date(x.at)} av {x.actor}{x.scope === "leverandor" ? " for leverandøren" : ""}{x.note ? `: ${x.note}` : ""}</span>
-        <button className="underline underline-offset-2 hover:text-ink" disabled={undo.isPending} onClick={() => undo.mutate(x.id)}>Angre</button>
+        <button className="underline underline-offset-2 hover:text-fg" disabled={undo.isPending} onClick={() => undo.mutate(x.id)}>Angre</button>
       </div>
     );
   }
-  if (!open) return <button className="mt-1 pl-5 text-xs text-muted underline underline-offset-2 hover:text-ink" onClick={() => setOpen(true)}>Avskriv flagg</button>;
+  if (!open) return <button className="mt-1 text-xs text-muted underline decoration-line underline-offset-2 transition-colors duration-150 hover:text-fg hover:decoration-current" onClick={() => setOpen(true)}>Avskriv flagg</button>;
   return (
-    <div className="mt-2 space-y-2 rounded-md bg-sunk p-2.5 pl-5 text-xs">
+    <div className="mt-2 space-y-2 rounded-md bg-sunk p-3 text-xs">
       <label className="block">
         <span className="text-muted">Årsak</span>
         <select className="mt-0.5 block w-full rounded-md border border-line bg-surface px-2 py-1 text-sm" value={reason} onChange={(e) => setReason(e.target.value)}>
@@ -115,18 +115,18 @@ function FlagList({ flags, d }: { flags: Flag[]; d?: ContractDetail }) {
         const dq = key === "datakvalitet";
         return (
           <div key={key}>
-            <div className="mb-1 text-xs text-muted">{label}</div>
-            <ul className="space-y-1">
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
+              {!dq && <span className="h-2 w-2 rounded-full" style={{ background: SOURCE_COLOR[sourceKey(key === "andre" ? "andre" : key)] }} />}{label}</div>
+            <ul className="divide-y divide-line border-y border-line">
               {fl.map((f) => (
-                <li key={f.key} className={cx("rounded-md border px-3 py-2 text-sm", dq ? "border-dashed border-line text-muted" : "border-line", f.dismissed && "opacity-70")}>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2"><span className={dq ? "text-muted" : "text-mid"} aria-hidden>{dq ? "○" : "▲"}</span>
-                      <span className={f.dismissed ? "line-through decoration-muted" : ""}>{f.label}</span></span>
+                <li key={f.key} className={cx("py-2.5 text-sm", dq && "text-muted")}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={cx("font-medium", (f.dismissed || dq) && "font-normal text-muted", f.dismissed && "line-through decoration-[color-mix(in_srgb,var(--muted)_60%,transparent)]")}>{f.label}</span>
                     {!dq && <span className="num shrink-0 text-xs text-muted" title={`Vekt ${f.weight.toLocaleString("nb-NO")}`}>
                       {f.bidrag != null ? `+${f.bidrag.toLocaleString("nb-NO")} poeng` : `vekt ${f.weight.toLocaleString("nb-NO")}`}</span>}
                   </div>
-                  {f.why && <div className="mt-0.5 pl-5 text-xs text-muted">{isoDatesInText(f.why)}</div>}
-                  {f.data_note && <div className="mt-0.5 pl-5 text-xs text-mid">{f.data_note}</div>}
+                  {f.why && <div className="mt-0.5 text-xs text-muted">{isoDatesInText(f.why)}</div>}
+                  {f.data_note && <div className="mt-0.5 text-xs text-mid">{f.data_note}</div>}
                   {f.checks?.length ? <Checks checks={f.checks} /> : null}
                   {d && !STATIC && !dq && <Dismiss d={d} f={f} />}
                 </li>
@@ -139,21 +139,22 @@ function FlagList({ flags, d }: { flags: Flag[]; d?: ContractDetail }) {
   );
 }
 
+// Svaret på hver alternative forklaring som ord, ikke tegn
 const CHECK_MARK: Record<FlagCheck["status"], [string, string]> = {
-  ok: ["✓", "sjekket"], justert: ["≈", "justert"], forklarer: ["–", "forklart, teller ikke"],
-  svekker: ["½", "kan forklare, halv vekt"], ukjent: ["?", "data mangler"],
+  ok: ["Sjekket", "bg-lo-soft text-lo"], justert: ["Justert", "bg-mid-soft text-mid"], forklarer: ["Forklart", "bg-sunk text-muted"],
+  svekker: ["Halv vekt", "bg-mid-soft text-mid"], ukjent: ["Data mangler", "border border-line text-muted"],
 };
 
 // Alternative forklaringer som er sjekket for leverandørflagget, med svaret dataene gir
 function Checks({ checks }: { checks: FlagCheck[] }) {
   return (
-    <details className="mt-1 pl-5 text-xs text-muted">
-      <summary className="cursor-pointer">Alternative forklaringer ({checks.length})</summary>
-      <ul className="mt-1 space-y-0.5">
+    <details className="mt-1 text-xs text-muted">
+      <summary className="cursor-pointer hover:text-fg">Alternative forklaringer ({checks.length})</summary>
+      <ul className="mt-1.5 space-y-1">
         {checks.map((c, i) => (
-          <li key={i} title={CHECK_MARK[c.status][1]}>
-            <span className="num inline-block w-4" aria-label={CHECK_MARK[c.status][1]}>{CHECK_MARK[c.status][0]}</span>
-            <span className="text-fg">{c.q}</span> {c.a}
+          <li key={i} className="flex items-baseline gap-2">
+            <span className={cx("shrink-0 rounded px-1.5 py-px text-[11px] font-medium", CHECK_MARK[c.status][1])}>{CHECK_MARK[c.status][0]}</span>
+            <span><span className="text-fg">{c.q}</span> {c.a}</span>
           </li>
         ))}
       </ul>
@@ -166,10 +167,10 @@ function Supplier({ s }: { s: SupplierCard }) {
   const status = !b ? "Ikke hentet fra Brreg" : b.kind === "slettet" ? `Slettet ${b.slettedato ?? ""}` : b.konkurs ? "Konkurs"
     : b.under_avvikling || b.tvangsavvikling ? "Under avvikling" : "Aktiv";
   return (
-    <div className="rounded-md border border-line p-3">
+    <div className="rounded-lg bg-sunk p-3.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Link to={`/leverandorer/${s.orgnr}`} className="font-medium text-accent hover:underline">{b?.navn ?? s.orgnr}</Link>
-        <a href={s.brreg_url} target="_blank" rel="noreferrer" className="font-mono text-xs text-muted hover:underline">{s.orgnr} ↗</a>
+        <a href={s.brreg_url} target="_blank" rel="noreferrer" className="num inline-flex items-center gap-1 text-xs text-muted hover:text-fg hover:underline">{s.orgnr}<Icon name="external" className="h-3 w-3" /></a>
       </div>
       {b && (
         <dl className="mt-2">
@@ -216,7 +217,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
   });
   if (!c) {
     return (
-      <div className="rounded-md border border-dashed border-line p-4 text-sm">
+      <div className="rounded-lg bg-sunk p-4 text-sm">
         <p className="mb-3 text-muted">Ingen sak ennå. Opprett en sak for å sette status, notere og få logg og arbeidspapir.</p>
         <Button onClick={() => create.mutate()} disabled={create.isPending}>Opprett sak</Button>
       </div>
@@ -224,7 +225,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
   }
   const dirty = note !== (c.note ?? "") || assignee !== (c.assignee ?? "");
   return (
-    <div className="space-y-3 rounded-md border border-line p-3">
+    <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="text-xs text-muted">Status
           <select value={c.status} onChange={(e) => patch.mutate({ status: e.target.value })}
@@ -237,7 +238,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
             className="mt-1 h-9 w-full rounded-md border border-line bg-surface px-2 text-sm text-fg" />
         </label>
       </div>
-      <div className="rounded-md bg-sunk/60 p-2.5">
+      <div className="rounded-lg bg-sunk p-3">
         <div className="text-xs text-muted">Var flagget verdt å se på? Vurderingen logges og brukes til å forbedre modellene.</div>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {["Relevant", "Ikke relevant"].map((v) => (
@@ -257,7 +258,7 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
         <Button onClick={() => patch.mutate({ note, assignee })} disabled={!dirty || patch.isPending}>Lagre</Button>
         {STATIC
           ? <Button variant="outline" onClick={() => saveWorkpaper(String(c.id)).catch((e) => setFileError(String(e.message)))}>Last ned arbeidspapir</Button>
-          : <a className="inline-flex items-center rounded-md border border-line px-3 py-1.5 text-sm hover:bg-sunk"
+          : <a className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line px-3 text-sm font-medium transition-colors duration-150 hover:border-field hover:bg-sunk"
             href={`/api/cases/${c.id}/arbeidspapir`} target="_blank" rel="noreferrer">Arbeidspapir (utskrift/PDF)</a>}
       </div>
       {fileError && <p className="text-sm text-hi">{fileError}</p>}
@@ -270,6 +271,23 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
           ))}
         </ul>
       </details>
+    </div>
+  );
+}
+
+// Summen per kilde under poengstripen: hvor mye av prioriteten kommer fra kunngjøringen, Brreg og andre registre
+function SourceSums({ flags }: { flags: Flag[] }) {
+  const sums: Record<string, number> = {};
+  for (const f of flags) if (f.source !== "datakvalitet" && !f.dismissed && f.bidrag) sums[sourceKey(f.source)] = (sums[sourceKey(f.source)] ?? 0) + f.bidrag;
+  const n = flags.filter((f) => f.dismissed).length;
+  if (!Object.keys(sums).length && !n) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+      {(Object.keys(SOURCE_LABEL) as (keyof typeof SOURCE_COLOR)[]).filter((k) => sums[k]).map((k) => (
+        <span key={k} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: SOURCE_COLOR[k] }} />
+          {SOURCE_LABEL[k]} <span className="num font-medium text-fg">+{sums[k].toLocaleString("nb-NO", { maximumFractionDigits: 1 })}</span></span>
+      ))}
+      {n > 0 && <span className="inline-flex items-center gap-1.5"><span className="strip-dismissed h-2 w-3 rounded-sm" />{n} avskrevet</span>}
     </div>
   );
 }
@@ -288,37 +306,41 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
   const ai = d.assessments[0];
   const nightly = ai?.kind === "nattlig";
   return (
-    <article className="space-y-6 p-5">
+    <article className="space-y-7 p-5 sm:p-6">
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span className="font-mono">{d.id}</span><span>·</span><span>{date(d.pub_date)}</span><TierBadge tier={d.tier} />
-          {d.case_status && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-accent">Sak: {d.case_status}</span>}
+          <span className="num">{d.id}</span><span aria-hidden>·</span><span>{date(d.pub_date)}</span><TierBadge tier={d.tier} />
+          {d.case_status && <span className="inline-flex items-center gap-1 rounded bg-accent-soft px-1.5 py-px font-medium text-accent"><Icon name="flag" className="h-3 w-3" />Sak: {d.case_status}</span>}
         </div>
-        <h2 className="text-lg font-semibold leading-snug [overflow-wrap:anywhere]">{d.title}</h2>
+        <h2 className="text-xl font-semibold leading-snug tracking-[-0.01em] [overflow-wrap:anywhere] [text-wrap:balance]">{d.title}</h2>
         <p className="text-sm text-muted">{d.buyer} · {d.region} · {d.sector}</p>
         <div className="flex flex-wrap gap-2 pt-1">
           {live && <Button variant="outline" onClick={() => assess.mutate()} disabled={assess.isPending}>
             {assess.isPending ? "Vurderer …" : ai ? "Ny AI-vurdering" : "AI-vurdering"}
           </Button>}
-          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-md px-3 py-1.5 text-sm hover:bg-sunk">Åpne i {d.source === "doffin" ? "Doffin" : "TED"} ↗</a>}
+          {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-accent transition-colors duration-150 hover:bg-sunk">Åpne i {d.source === "doffin" ? "Doffin" : "TED"}<Icon name="external" className="h-3.5 w-3.5" /></a>}
         </div>
         {assess.isError && <p className="text-sm text-hi">{String(assess.error.message)}</p>}
       </header>
 
       {(d.regler ?? []).length > 0 && (
-        <section className="rounded-md border border-hi/40 p-4">
-          <h3 className="text-sm font-medium">Faste kontrollpunkter</h3>
-          <p className="text-xs text-muted">Slår ut uansett hvordan resten av datasettet ser ut. Må kontrolleres mot originalkunngjøringen.</p>
-          <ul className="mt-2 space-y-1 text-sm">{d.regler.map((x) => (
-            <li key={x.key}><span className="text-hi">◆</span> {x.label}{x.why && <span className="block pl-4 text-xs text-muted">{isoDatesInText(x.why)}</span>}</li>))}
+        <section className="rounded-lg bg-hi-soft p-4">
+          <h3 className="text-sm font-semibold text-hi">Faste kontrollpunkter</h3>
+          <p className="text-xs text-[color-mix(in_srgb,var(--fg)_75%,transparent)]">Slår ut uansett hvordan resten av datasettet ser ut. Må kontrolleres mot originalkunngjøringen.</p>
+          <ul className="mt-2.5 space-y-1.5 text-sm">{d.regler.map((x) => (
+            <li key={x.key} className="flex gap-2"><Icon name="rule" className="mt-0.5 h-3.5 w-3.5 text-hi" />
+              <span><span className="font-medium">{x.label}</span>{x.why && <span className="block text-xs text-[color-mix(in_srgb,var(--fg)_75%,transparent)]">{isoDatesInText(x.why)}</span>}</span></li>))}
           </ul>
         </section>)}
 
-      <section className="grid grid-cols-[auto_1fr] items-center gap-4 rounded-md border border-line p-4">
-        <div className="num text-4xl font-bold" style={{ color: tierColor(d.tier) }}>{Math.round(d.priority)}</div>
-        <div>
-          <div className="text-sm font-medium">Prioritet</div>
-          <Meter value={d.priority} color={tierColor(d.tier)} className="my-1.5" />
+      <section className="rounded-lg bg-sunk p-4">
+        <div className="flex items-end gap-3">
+          <div className="num text-[44px] font-semibold leading-none tracking-[-0.02em]" style={{ color: tierColor(d.tier) }}>{Math.round(d.priority)}</div>
+          <div className="pb-1 text-sm"><span className="font-semibold">Prioritet</span> <span className="text-muted">av 100</span></div>
+        </div>
+        <ScoreStrip flags={d.flags} priority={d.priority} size="lg" className="mt-3 bg-surface" />
+        <SourceSums flags={d.flags} />
+        <div className="mt-3 grid gap-1.5">
           <p className="text-xs text-muted">{d.tier === "Intensjon"
             ? "Intensjonskunngjøringer er ikke kontrakter og rangeres ikke. Poengsummen viser bare hvilke observasjoner som slår ut."
             : <>Relativ rangering: blant de {pct(Math.max(0.1, 100 - d.percentile))} høyeste nasjonalt. Ikke en sannsynlighet for regelbrudd.</>} Datadekning {d.data_coverage} av 4 nøkkelfelt
@@ -326,26 +348,26 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
               d.award_value == null && "tildelt verdi", d.contract_months == null && "varighet"].filter(Boolean).join(", ")})</>}.
             {" "}Flagg som ikke kan vurderes uten disse feltene, slår ikke ut.</p>
           {d.peer_group && d.peer_percentile != null && (
-            <p className="mt-1 text-xs text-muted" title="Samme poengsum rangert bare mot kontrakter fra samme type oppdragsgiver og sektor">
+            <p className="text-xs text-muted" title="Samme poengsum rangert bare mot kontrakter fra samme type oppdragsgiver og sektor">
               Innen sammenligningsgruppen <b className="font-medium">{d.peer_group}</b>: {d.peer_tier.toLowerCase()} prioritet,
               blant de {pct(Math.max(0.1, 100 - d.peer_percentile))} høyeste.</p>)}
-        </div>
         {d.klagerisiko != null && (
-          <p className="col-span-2 text-xs text-muted">
+          <p className="text-xs text-muted">
             <b className="font-medium">Klagerisiko (eksperimentell): persentil {Math.round(d.klagerisiko)}</b>. Rangert over {Math.round(d.klagerisiko)} % av kontraktene i radaren
             på trekk som har fulgt KOFA-klager (verdi, oppdragsgivertype, type anskaffelse). En rangering, ikke en sannsynlighet. Måler klagerisiko, ikke korrupsjon, og teller ikke i prioriteten.
           </p>)}
-        <p className="col-span-2 text-xs text-muted">Røde flagg (CRI) {Math.round(d.cri)}. Prioriteten bygger på de røde flaggene og registerflaggene.</p>
+        <p className="text-xs text-muted">Røde flagg (CRI) {Math.round(d.cri)}. Prioriteten bygger på de røde flaggene og registerflaggene.</p>
+        </div>
       </section>
 
       {ai && (
-        <section className="rounded-md border border-accent/30 bg-accent-soft/60 p-4">
+        <section className="rounded-lg bg-accent-soft p-4">
           <div className="mb-2 text-xs font-medium text-accent">AI-vurdering · beslutningsstøtte, ikke konklusjon · {ai.provider}/{ai.model} · {nightly ? `laget ${date(ai.at)}` : dateTime(ai.at)}</div>
           <Md text={ai.text} />
         </section>
       )}
       {!ai && !live && (
-        <p className="rounded-md border border-line p-3 text-xs text-muted">AI-vurdering lages bare for saker med høy prioritet.</p>
+        <p className="text-xs text-muted">AI-vurdering lages bare for saker med høy prioritet.</p>
       )}
 
       <Section title="Røde flagg"><FlagList flags={d.flags} d={d} /></Section>
@@ -363,7 +385,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           {d.justification && <Row k="Begrunnelse" v={d.justification} />}
           <Row k="Antall tilbud" v={int(d.num_bidders)} />
           <Row k="Estimert verdi" v={nok(d.est_value)} />
-          <Row k="Tildelt verdi" v={<>{nok(d.award_value)}{d.value_note && <span className="block text-xs text-muted">○ {d.value_note}</span>}</>} />
+          <Row k="Tildelt verdi" v={<>{nok(d.award_value)}{d.value_note && <span className="block text-xs text-mid">{d.value_note}</span>}</>} />
           <Row k="Tildelt mot estimat" v={signedPct(d.award_over_estimate_pct)} />
           <Row k="Tilbudsfrist" v={d.tender_duration_days != null ? `${Math.round(d.tender_duration_days)} dager (fra ${d.cn_ref})` : "–"} />
           <Row k="Varighet" v={d.contract_months ? `${Math.round(d.contract_months)} mnd` : "–"} />
@@ -375,7 +397,7 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           {d.procedure_id && d.procedure_id !== d.id && <Row k="Anskaffelsesforløp (prosedyre-ID)" v={<span className="font-mono text-xs">{d.procedure_id}</span>} />}
           {(d.also ?? []).length > 0 && <Row k="Samme tildeling også kunngjort som" v={<>{d.also!.map((a) => (
             <span key={a.id} className="block" title={a.rule}>{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="underline">
-              {a.source === "doffin" ? "Doffin" : "TED"} {a.id.replace(/^doffin-/, "")} ↗</a> : a.id}</span>))}
+              {a.source === "doffin" ? "Doffin" : "TED"} {a.id.replace(/^doffin-/, "")}</a> : a.id}</span>))}
             <span className="block text-xs text-muted">Telles som én kontrakt</span></>} />}
         </dl>
       </Section>
@@ -385,9 +407,9 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
           {d.einnsyn.length === 0 ? (
             <p className="text-sm text-muted">Ingen journalposter med leverandøren som avsender eller mottaker. Mange kommuner publiserer ikke i eInnsyn, så det betyr ikke at dokumentene mangler.</p>
           ) : (
-            <ul className="divide-y divide-line rounded-md border border-line">
+            <ul className="divide-y divide-line border-y border-line">
               {d.einnsyn.map((j, i) => (
-                <li key={i} className="px-3 py-2 text-sm">
+                <li key={i} className="py-2 text-sm">
                   <div className="flex justify-between gap-3">
                     {j.url ? <a href={j.url} target="_blank" rel="noreferrer" className="min-w-0 truncate text-accent hover:underline">{j.title}</a>
                       : <span className="min-w-0 truncate">{j.title}</span>}
@@ -403,10 +425,10 @@ export function CaseFile({ id, onOpen }: { id: string; onOpen?: (id: string) => 
 
       {d.sameSupplier.length > 0 && (
         <Section title="Andre tildelinger, samme oppdragsgiver og leverandør">
-          <ul className="divide-y divide-line rounded-md border border-line">
+          <ul className="divide-y divide-line border-y border-line">
             {d.sameSupplier.map((s) => (
               <li key={s.id}>
-                <button className="flex w-full justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-sunk" onClick={() => onOpen?.(s.id)}>
+                <button className="-mx-2 flex w-[calc(100%+1rem)] justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors duration-150 hover:bg-sunk" onClick={() => onOpen?.(s.id)}>
                   <span className="truncate">{s.title}</span><span className="num shrink-0 text-xs text-muted">{date(s.pub_date)}</span>
                 </button>
               </li>
