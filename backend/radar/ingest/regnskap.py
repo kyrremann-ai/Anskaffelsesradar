@@ -95,7 +95,8 @@ def fetch_one(client: httpx.Client, o: str, retries: int = 3, pause: float = 2.0
         if r.status_code == 404:
             return {"orgnr": o}, []
         if r.status_code == 429 or r.status_code >= 500:
-            time.sleep(float(r.headers.get("Retry-After") or pause * 2 ** i))
+            ra = r.headers.get("Retry-After", "")
+            time.sleep(min(float(ra), 60) if ra.replace(".", "", 1).isdigit() else pause * 2 ** i)  # kan også være en dato
             continue
         if r.status_code != 200:
             return None
