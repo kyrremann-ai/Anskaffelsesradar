@@ -20,19 +20,24 @@ import httpx
 from .config import settings
 from .ingest import registers, regnskap, sanctions, owners, validate
 
-# Store selskaper som alltid har regnskap i Regnskapsregisteret (Equinor, DNB Bank, Norsk Hydro)
-SAMPLE_ORGNR = ["923609016", "984851006", "914778271"]
+# Store selskaper som alltid har regnskap i Regnskapsregisteret (Equinor, DNB Bank, Norsk Hydro, Telenor)
+SAMPLE_ORGNR = ["923609016", "984851006", "914778271", "982463718"]
 
 
 def _regnskap() -> dict:
-    rows, years = [], []
+    rows, years, failed = [], [], []
     with httpx.Client(headers={"Accept": "application/json", "User-Agent": settings.brreg_user_agent}) as c:
         for o in SAMPLE_ORGNR:
-            r = c.get(regnskap.URL.format(orgnr=o), timeout=30)
-            r.raise_for_status()
-            body = r.json()
-            rows.append(regnskap.parse(o, body) or {"orgnr": o})
-            years += regnskap.parse_years(o, body)
+            res = regnskap.fetch_one(c, o)  # samme kall som produksjonen, med nye forsøk ved 429/5xx
+            if res is None:
+                failed.append(o)
+                continue
+            rows.append(res[0])
+            years += res[1]
+    if failed:
+        validate.warn(f"Regnskapsregisteret: ingen gyldig respons for {', '.join(failed)} etter nye forsøk (5xx/429)")
+    if not rows:
+        raise RuntimeError("Regnskapsregisteret svarte ikke for noen av utvalgsselskapene")
     ok = validate.check("Regnskapsregisteret", rows, validate.RegnskapRow, core=("aar", "driftsinntekter", "egenkapital"))
     if any(r.get("driftsinntekter") is None for r in ok):
         validate.warn("Regnskapsregisteret: driftsinntekter mangler for et storselskap. Sjekk feltstien i regnskap._row.")

@@ -268,7 +268,7 @@ def test_verify_sources_report_with_mocked_network(monkeypatch):
     monkeypatch.setattr(httpx, "Client", client)
     monkeypatch.setattr(vs, "settings", __import__("dataclasses").replace(vs.settings, renhold_register_url=""))
     res = vs.run()
-    assert res["Regnskapsregisteret"]["status"] in ("ok", "advarsel") and res["Regnskapsregisteret"]["rows"] == 3
+    assert res["Regnskapsregisteret"]["status"] in ("ok", "advarsel") and res["Regnskapsregisteret"]["rows"] == len(vs.SAMPLE_ORGNR)
     assert "Kildesjekk" in vs.report(res)
     _json.dumps(res, default=str)
 
@@ -316,3 +316,20 @@ def test_old_bankruptcies_are_deleted(con):
                             [{"orgnr": "555555555", "rolle": "DAGL", "person": "Per Hansen", "fodselsdato": "1965"}], "salt")
     assert con.execute("SELECT COUNT(*) FROM brreg_konkurs").fetchone()[0] == 0
     assert con.execute("SELECT COUNT(*) FROM brreg_konkurs_roles").fetchone()[0] == 0
+
+
+def test_regnskap_5xx_is_unknown_not_missing():
+    import httpx
+    from radar.ingest import regnskap
+    calls = {"n": 0}
+
+    def handler(req):
+        o = req.url.path.rsplit("/", 1)[-1]
+        if o == "111111111":
+            return httpx.Response(404)
+        calls["n"] += 1
+        return httpx.Response(500)
+    with httpx.Client(transport=httpx.MockTransport(handler)) as c:
+        assert regnskap.fetch_one(c, "111111111", pause=0) == ({"orgnr": "111111111"}, [])
+        assert regnskap.fetch_one(c, "222222222", pause=0) is None
+    assert calls["n"] == 3
