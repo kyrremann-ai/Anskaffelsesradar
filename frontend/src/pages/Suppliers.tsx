@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Card, KonkursCheck, Empty, PageHead, Search, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
+import { Icon, Card, KonkursCheck, Empty, PageHead, Search, Skeleton, TierBadge, cx, tierColor } from "../components/ui";
 import { useApi, type ContractRow, type SupplierCard } from "../lib/api";
 import { date, int, nok } from "../lib/format";
 import { useScope } from "../lib/scope";
@@ -37,7 +37,7 @@ export function Suppliers() {
                 <tr key={s.orgnr} className="border-t border-line hover:bg-sunk">
                   <td className="px-3 py-2">
                     <Link to={`/leverandorer/${s.orgnr}`} className="font-medium hover:underline">{s.name}</Link>
-                    <div className="font-mono text-xs text-muted">{s.orgnr}{s.stiftet ? ` · stiftet ${s.stiftet.slice(0, 4)}` : ""}{s.in_brreg ? "" : " · ikke hentet fra Brreg"}</div>
+                    <div className="num text-xs text-muted">{s.orgnr}{s.stiftet ? ` · stiftet ${s.stiftet.slice(0, 4)}` : ""}{s.in_brreg ? "" : " · ikke hentet fra Brreg"}</div>
                     <div className="num mt-1 text-xs text-muted sm:hidden">{int(s.n)} kontrakter · {int(s.n_buyers)} oppdragsgivere · {nok(s.total_value)}</div>
                     {s.brreg_flags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1 sm:hidden">{s.brreg_flags.map((f) => <span key={f} className="rounded bg-mid-soft px-1.5 py-0.5 text-xs text-mid">{f}</span>)}</div>}
                   </td>
@@ -71,8 +71,8 @@ export function SupplierPage() {
   const b = d.brreg;
   return (
     <div>
-      <PageHead title={b?.navn ?? orgnr} desc={<span className="font-mono">{orgnr} · <a className="hover:underline" href={d.brreg_url} target="_blank" rel="noreferrer">Åpne i Brønnøysundregistrene ↗</a></span>}
-        right={<Link to={`/arbeid?supplier=${orgnr}`} className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface">Kontraktene i arbeidsflaten →</Link>} />
+      <PageHead title={b?.navn ?? orgnr} desc={<span className="num">{orgnr} · <a className="inline-flex items-center gap-1 hover:underline" href={d.brreg_url} target="_blank" rel="noreferrer">Åpne i Brønnøysundregistrene<Icon name="external" className="h-3 w-3" /></a></span>}
+        right={<Link to={`/arbeid?supplier=${orgnr}`} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-medium text-surface transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)]">Kontraktene i arbeidsflaten<Icon name="arrow" /></Link>} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Enhetsregisteret">
           {!b ? <p className="text-sm text-muted">Ikke hentet ennå.</p> : (
@@ -113,7 +113,7 @@ export function SupplierPage() {
           )}
           {!!d.owners_indirect?.length && (
             <>
-              <h4 className="mt-3 text-xs font-medium uppercase tracking-wide text-muted">Indirekte, minst 10 %</h4>
+              <h4 className="mt-3 text-xs font-semibold text-muted">Indirekte, minst 10 %</h4>
               <ul className="mt-1 space-y-1 text-sm">{d.owners_indirect.map((o, i) => (
                 <li key={i} className="flex justify-between gap-3">
                   <span>{o.orgnr ? <Link to={`/leverandorer/${o.orgnr}`} className="hover:underline">{o.name}</Link> : o.name}

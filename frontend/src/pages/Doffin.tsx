@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Empty, PageHead, Search, Skeleton, cx } from "../components/ui";
+import { Icon, Button, Empty, PageHead, Search, Skeleton, cx } from "../components/ui";
 import { useApi, type Meta } from "../lib/api";
 import { date, int, nok } from "../lib/format";
 
@@ -18,7 +18,7 @@ export default function Doffin() {
   return (
     <div>
       <PageHead title="Doffin live" desc="De nyeste kunngjøringene fra Doffin, hentet direkte. Flaggene vises før kontrakten tildeles, også under EØS-terskel."
-        right={<Button variant="outline" onClick={() => refetch()} disabled={isFetching || !meta?.doffin}>↻ Oppdater</Button>} />
+        right={<Button variant="outline" onClick={() => refetch()} disabled={isFetching || !meta?.doffin}><Icon name="refresh" />Oppdater</Button>} />
       {meta && !meta.doffin ? (
         <Empty>Doffin-nøkkel mangler. Hent en gratis nøkkel i DFØs API-portal og sett <code>DOFFIN_API_KEY</code> i <code>.env</code>.</Empty>
       ) : (

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Card, Empty, Kpi, Meter, PageHead, Skeleton, TierBadge, tierColor } from "../components/ui";
+import { Card, Empty, Icon, Kpi, KpiRow, Meter, PageHead, ScoreStrip, Skeleton, SourceLegend, SOURCE_COLOR, TierBadge, sourceKey, tierColor } from "../components/ui";
 import { useApi, type ContractRow, type Meta, type Summary } from "../lib/api";
 import { MONTHS, date, int, nok, pct } from "../lib/format";
 import { useScope } from "../lib/scope";
@@ -22,6 +22,8 @@ export default function Overview() {
   if (!s.n) return <Empty>{s.loading ? "Laster data og kjører modellene første gang. Det tar et øyeblikk …" : "Ingen kontrakter ennå. Trykk «Hent nye data»."}</Empty>;
   const monthly = s.monthly.map((m) => ({ ...m, label: `${MONTHS[Number(m.month.slice(5)) - 1]} ${m.month.slice(2, 4)}` }));
   const maxFlag = Math.max(...s.flag_counts.map((f) => f.n));
+  // Skalert mot høyeste sektor, så forskjellene synes (snittprioriteten ligger langt under 100)
+  const maxSector = Math.max(1, ...s.by_sector.slice(0, 10).map((g) => g.avg_score));
   const o = meta?.observasjonsenhet;
   const sources = `${meta?.sources?.Doffin?.status === "ok" ? "TED og Doffin" : "TED"}, tildelt`;
   const open = Object.entries(s.cases).filter(([k]) => !k.startsWith("Avsluttet")).reduce((a, [, n]) => a + n, 0);
@@ -29,29 +31,66 @@ export default function Overview() {
     <div>
       <PageHead title={sel.length ? "Oversikt for dine enheter" : "Oversikt"}
         desc={`${int(s.n)} tildelte kontrakter fra ${int(s.n_buyers)} oppdragsgivere, ${date(s.period[0])} til ${date(s.period[1])}.${sel.length ? " Tallene sammenlignes med hele Norge." : " Velg «Mine enheter» øverst for å se bare dine kommuner og foretak."}`}
-        right={<Link to="/arbeid" className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90">Åpne arbeidsflaten →</Link>} />
+        right={<Link to="/arbeid" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-medium text-surface transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)]">Åpne arbeidsflaten <Icon name="arrow" /></Link>} />
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 2xl:grid-cols-6">
+      <KpiRow>
         <Kpi to="/arbeid" label="Kontrakter" value={int(s.n)} sub={sources} />
         <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt (rangering, ikke sannsynlighet)" />
         <Kpi to="/arbeid?tier=Forhøyet" label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
         <Kpi to="/arbeid?flag=single_bid" label="Ett registrert tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med oppgitt antall tilbud" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
         <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Andel av kontraktene" compare={vs(s.direct_pct, s.national?.direct_pct)} />
         <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub="Saker som ikke er avsluttet" />
-      </div>
-      <p className="mt-2 text-xs text-muted">
+      </KpiRow>
+      <p className="mt-2.5 max-w-[120ch] text-xs leading-relaxed text-muted">
         {o && !sel.length && <>Én kontrakt = én kunngjort tildeling. {int(o.kunngjøringer)} kunngjøringer fra TED og Doffin gir {int(o.kontrakter)} kontrakter
           i {int(o.forløp)} anskaffelsesforløp: {int(Object.values(o.duplikater).reduce((a, b) => a + b, 0))} duplikater er slått sammen, og{" "}
           {int(o.per_type.intensjon ?? 0)} intensjonskunngjøringer telles for seg. </>}
         Samlet tildelt verdi: {nok(s.total_value)}. Bare {pct(s.coverage_pct, 0)} av kontraktene oppgir både estimat og tildelt verdi. Rammeavtaler oppgir ofte maksverdi. <Link to="/metode" className="underline">Metode</Link>
       </p>
       {s.regler.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-xs text-muted" title="Slår ut uansett hvordan resten av datasettet ser ut, i motsetning til prioriteten">Faste kontrollpunkter:</span>
-          {s.regler.map((x) => <Link key={x.key} to={`/arbeid?flag=regel:${x.key}`} className="rounded border border-hi/40 px-2 py-0.5 text-hi hover:bg-hi-soft">◆ {x.label} <span className="num">{int(x.n)}</span></Link>)}
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          <span className="mr-1 text-xs text-muted" title="Slår ut uansett hvordan resten av datasettet ser ut, i motsetning til prioriteten">Faste kontrollpunkter</span>
+          {s.regler.map((x) => <Link key={x.key} to={`/arbeid?flag=regel:${x.key}`} className="inline-flex items-center gap-1.5 rounded-md border border-[color-mix(in_srgb,var(--hi)_38%,transparent)] px-2 py-1 text-hi transition-colors duration-150 hover:bg-hi-soft"><Icon name="rule" className="h-3.5 w-3.5" />{x.label} <span className="num font-semibold">{int(x.n)}</span></Link>)}
         </div>)}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-[1.55fr_1fr]">
+        <Card title="Høyest prioritert uten sak" desc={<>Stripen viser hva prioriteten består av. <SourceLegend className="mt-1.5" /></>}
+          right={<Link to="/arbeid?sak=uten" className="-my-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-accent hover:bg-sunk">Se alle <Icon name="arrow" className="h-3.5 w-3.5" /></Link>}>
+          {top ? (
+            <ul className="-mx-2 -my-1">
+              {top.rows.map((r) => (
+                <li key={r.id}>
+                  <Link to={`/arbeid?id=${encodeURIComponent(r.id)}`} className="group flex items-start gap-4 rounded-md px-2 py-2.5 transition-colors duration-150 hover:bg-sunk">
+                    <span className="num w-8 shrink-0 pt-px text-right text-lg font-semibold leading-tight" style={{ color: tierColor(r.tier) }}>{Math.round(r.priority)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="line-clamp-2 text-sm font-medium group-hover:underline sm:line-clamp-1">{r.title}</span>
+                        <span className="shrink-0 max-sm:hidden"><TierBadge tier={r.tier} /></span>
+                      </span>
+                      <span className="block truncate text-xs text-muted">{r.buyer} · {r.flags.filter((f) => f.source !== "datakvalitet").map((f) => f.label).slice(0, 3).join(" · ")}</span>
+                      <ScoreStrip flags={r.flags} priority={r.priority} size="sm" className="mt-2" />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <Skeleton className="h-64" />}
+        </Card>
+        <Card title="Hyppigste røde flagg" desc="Fargen viser kilden. Velg et flagg for å se kontraktene.">
+          <ul className="space-y-2.5">
+            {s.flag_counts.slice(0, 10).map((f) => (
+              <li key={f.key}>
+                <Link to={`/arbeid?flag=${f.key}`} className="group block">
+                  <div className="flex justify-between gap-2 text-sm"><span className="truncate group-hover:underline">{f.label}</span><span className="num text-muted">{int(f.n)}</span></div>
+                  <Meter value={f.n} max={maxFlag} color={SOURCE_COLOR[sourceKey(f.source ?? "kunngjøring")]} className="mt-1" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[1.55fr_1fr]">
         <Card title="Kontrakter per måned" desc="Flagget = høy eller forhøyet prioritet">
           <div className="h-64">
             <ResponsiveContainer>
@@ -61,45 +100,12 @@ export default function Overview() {
                 <YAxis tick={tick} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 6, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v) => <span style={{ color: "var(--fg)" }}>{v}</span>} />
-                <Bar dataKey="n" name="Alle tildelinger" fill="color-mix(in srgb, var(--accent) 30%, var(--surface))" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="flagged" name="Flagget" fill="var(--mid)" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="n" name="Alle tildelinger" fill="color-mix(in srgb, var(--accent) 22%, var(--surface))" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="flagged" name="Flagget" fill="var(--accent)" radius={[2, 2, 0, 0]} />
                 <Line dataKey="direct" name="Direkte tildelinger" stroke="var(--hi)" strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-        </Card>
-        <Card title="Hyppigste røde flagg" desc="Klikk for å se kontraktene i arbeidsflaten">
-          <ul className="space-y-2.5">
-            {s.flag_counts.slice(0, 10).map((f) => (
-              <li key={f.key}>
-                <Link to={`/arbeid?flag=${f.key}`} className="group block">
-                  <div className="flex justify-between gap-2 text-sm"><span className="truncate group-hover:underline">{f.label}</span><span className="num text-muted">{int(f.n)}</span></div>
-                  <Meter value={f.n} max={maxFlag} color="var(--accent)" className="mt-1" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <Card title="Høyest prioritert uten sak" right={<Link to="/arbeid?sak=uten" className="-my-1 rounded px-2 py-1 text-xs text-accent hover:underline">Se alle</Link>}>
-          {top ? (
-            <ul className="-my-2 divide-y divide-line">
-              {top.rows.map((r) => (
-                <li key={r.id}>
-                  <Link to={`/arbeid?id=${encodeURIComponent(r.id)}`} className="-mx-2 flex items-center gap-4 rounded px-2 py-2.5 hover:bg-sunk">
-                    <span className="num w-9 shrink-0 text-right text-base font-bold" style={{ color: tierColor(r.tier) }}>{Math.round(r.priority)}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-sm font-medium sm:line-clamp-1">{r.title}</span>
-                      <span className="block truncate text-xs text-muted">{r.buyer} · {r.flags.map((f) => f.label).slice(0, 3).join(" · ")}</span>
-                    </span>
-                    <TierBadge tier={r.tier} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : <Skeleton className="h-64" />}
         </Card>
         <Card title="Prioritet per sektor" desc="Snittprioritet per sektor. Rangeringen er nasjonal, så forskjeller kan skyldes hvordan sektorene kjøper, ikke risiko.">
           <table className="w-full text-sm">
@@ -110,7 +116,7 @@ export default function Overview() {
                   <td className="py-1.5 pr-2">{g.name}</td>
                   <td className="num text-right">{int(g.n)}</td>
                   <td className="num text-right">{pct(g.single_bid_pct, 0)}</td>
-                  <td className="pl-3"><div className="flex items-center gap-2"><Meter value={g.avg_score} className="flex-1" /><span className="num w-6 text-right text-xs">{Math.round(g.avg_score)}</span></div></td>
+                  <td className="pl-3"><div className="flex items-center gap-2"><Meter value={g.avg_score} max={maxSector} className="flex-1" /><span className="num w-6 text-right text-xs">{Math.round(g.avg_score)}</span></div></td>
                 </tr>
               ))}
             </tbody>

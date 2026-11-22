@@ -75,7 +75,7 @@ export default function Method() {
             </tbody></table>
             <p className="mt-2 text-xs text-muted">Utenlandske leverandører har ikke norsk orgnr. AS uten treff i aksjonærregisteret er et datakvalitetspunkt, ikke et trekk ved leverandøren. Usikre verdier brukes ikke i overskridelse og vises som datakvalitet i saksmappen.</p>
           </Card>)}
-        <Card title="Faste kontrollpunkter" desc="Slår ut uansett fordeling, og vises ved siden av prioriteten (◆)">
+        <Card title="Faste kontrollpunkter" desc="Slår ut uansett fordeling, og vises ved siden av prioriteten (rød rute)">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Ett registrert tilbud:</b> kunngjøringen oppgir ett mottatt tilbud.</li>
             <li><b>Direkte tildeling over nasjonal terskelverdi:</b> prosedyren er direkte tildeling og verdien er minst 1,3 mill. kr (FOA § 5-1). Lovlig ved gyldig unntak, som må sjekkes i begrunnelsen.</li>
@@ -149,7 +149,7 @@ export default function Method() {
             </ul>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted">
               <li>Måler <b>klagerisiko, ikke korrupsjon</b>. Store konkurranser med mange tilbydere klages oftere inn, mens direkte anskaffelser uten konkurranse sjelden blir klaget inn.</li>
-              <li>KOFA-sakene er koblet til kunngjøringer med navnesøk. Kommuner er lettere å koble på navn enn statlige etater, så kommune-effekten kan være delvis kunstig.</li>
+              <li>KOFA-sakene er koblet til kunngjøringer med en konfidens (orgnr, navn, gjenstand, tid og Doffin-ID). Bare sikre koblinger brukes i treningen, fordi navnesøk alene gjør kommuner lettere å koble enn statlige etater.</li>
               <li>Om KOFA fant brudd eller ikke lar seg ikke forutsi fra kunngjøringen (AUC rundt 0,5), så modellen skiller ikke på utfallet.</li>
               <li>Teller ikke i prioriteten før revisorenes vurderinger viser at den treffer.</li>
             </ul>

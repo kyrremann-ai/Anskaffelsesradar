@@ -2,29 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Farger fra Spor-skissen. Ingen eksterne fonter (personvern i offentlig sektor). */
+/* Revisjonsmappe: granskog-grønt skall, nøytral grunn, prioritet i vermilion/oker,
+   flaggkilder i egne farger (kunngjøring blå, Brreg umbra, andre registre plomme).
+   Ingen eksterne fonter (personvern i offentlig sektor): systemfonten bærer alt. */
 :root {
-  --bg: #eef2f4; --surface: #ffffff; --sunk: #f6f8f9; --fg: #14212a; --muted: #5a6872; --line: #d5dde2; --field: #7d8c97;
-  --accent: #1d5e7a; --accent-soft: #e2eef3; --ink: #0f2c3b; --ink-fg: #e8f1f5;
-  --hi: #b0362c; --hi-soft: #f8e3e0; --mid: #875a05; --mid-soft: #f6ebd4; --lo: #2f6b45; --lo-soft: #e0efe5;
+  --bg: #f2f3ef; --surface: #ffffff; --sunk: #eaece6; --fg: #1a211e; --muted: #59625d; --line: #d8dcd3; --field: #7d877f;
+  --shell: #1f3b33; --shell-fg: #edf3ef; --shell-muted: #a8bcb3; --shell-line: #2f5046;
+  --accent: #1f5c4a; --accent-soft: #e2ede7;
+  --ink: #1f3b33; --ink-fg: #edf3ef;
+  --hi: #b4371f; --hi-soft: #f7e3dd; --mid: #8a6100; --mid-soft: #f4ead0; --lo: #2f6b4c; --lo-soft: #e0eee5;
+  --src-kunngjoring: #2f4f86; --src-brreg: #9a5b13; --src-andre: #6e3f78;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842; --field: #617784;
-    --accent: #6fb3d1; --accent-soft: #1a303b; --ink: #08222f; --ink-fg: #d8e8ef;
-    --hi: #f08a7f; --hi-soft: #3b1f1c; --mid: #e3b55c; --mid-soft: #382d16; --lo: #7cc597; --lo-soft: #183022;
+    --bg: #101613; --surface: #171f1b; --sunk: #131a17; --fg: #e3eae6; --muted: #9aa8a1; --line: #29342f; --field: #66766d;
+    --shell: #13281f; --shell-fg: #e3eee8; --shell-muted: #8ea79b; --shell-line: #29473c;
+    --accent: #7cc4a6; --accent-soft: #1b2f27; --ink: #0c1a15; --ink-fg: #e3eee8;
+    --hi: #f08e78; --hi-soft: #3a201a; --mid: #e2b85a; --mid-soft: #362c16; --lo: #82c79f; --lo-soft: #18301f;
+    --src-kunngjoring: #86a7e0; --src-brreg: #d9a05a; --src-andre: #c595d0;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0d151a; --surface: #152028; --sunk: #111b21; --fg: #e2eaee; --muted: #97a8b2; --line: #283842; --field: #617784;
-  --accent: #6fb3d1; --accent-soft: #1a303b; --ink: #08222f; --ink-fg: #d8e8ef;
-  --hi: #f08a7f; --hi-soft: #3b1f1c; --mid: #e3b55c; --mid-soft: #382d16; --lo: #7cc597; --lo-soft: #183022;
+  --bg: #101613; --surface: #171f1b; --sunk: #131a17; --fg: #e3eae6; --muted: #9aa8a1; --line: #29342f; --field: #66766d;
+  --shell: #13281f; --shell-fg: #e3eee8; --shell-muted: #8ea79b; --shell-line: #29473c;
+  --accent: #7cc4a6; --accent-soft: #1b2f27; --ink: #0c1a15; --ink-fg: #e3eee8;
+  --hi: #f08e78; --hi-soft: #3a201a; --mid: #e2b85a; --mid-soft: #362c16; --lo: #82c79f; --lo-soft: #18301f;
+  --src-kunngjoring: #86a7e0; --src-brreg: #d9a05a; --src-andre: #c595d0;
   color-scheme: dark;
 }
-body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; }
+
+body { background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 .num { font-variant-numeric: tabular-nums; }
+/* Tall i tabeller og lister står alltid rett under hverandre */
+table, .tabular { font-variant-numeric: tabular-nums; }
+
+/* Nettleserens egne flater i appens palett */
+::selection { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+* { caret-color: var(--accent); scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; scrollbar-width: thin; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+a { text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
 /* Skjemafelt trenger synlig kant (minst 3:1), de dekorative skillelinjene gjør ikke det */
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { border-color: var(--field) !important; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Avskrevne segmenter i poengstripen: skravert, så de leses som «tatt ut» */
+.strip-dismissed {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 45%, transparent) 0 2px, transparent 2px 5px);
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

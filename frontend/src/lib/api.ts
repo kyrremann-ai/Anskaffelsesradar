@@ -99,7 +99,7 @@ export type Group = {
 export type Summary = Stats & {
   loading?: boolean; national: Stats | null; n_buyers: number; period: [string, string];
   monthly: { month: string; n: number; flagged: number; direct: number }[];
-  flag_counts: { key: string; label: string; n: number }[]; by_sector: Group[]; by_region: Group[];
+  flag_counts: { key: string; label: string; n: number; source?: string }[]; by_sector: Group[]; by_region: Group[];
   by_buyer: Group[]; cases: Record<string, number>;
   regler: { key: string; label: string; n: number }[]; n_intents: number;
 };

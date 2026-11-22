@@ -183,9 +183,9 @@ function summary(rows: Row[], buyers: string | null) {
   const intents = scope(rows, buyers).filter((r) => r.notice_type === "intensjon");
   const d = scope(all, buyers);
   const months = groupBy(d, (r) => (r.pub_date ?? "").slice(0, 7));
-  const counts = new Map<string, { key: string; label: string; n: number }>();
+  const counts = new Map<string, { key: string; label: string; n: number; source: string }>();
   for (const r of d) for (const f of r.flags) {
-    const c = counts.get(f.key) ?? { key: f.key, label: f.label.split(" (")[0], n: 0 };
+    const c = counts.get(f.key) ?? { key: f.key, label: f.label.split(" (")[0], n: 0, source: f.source };
     c.n++; counts.set(f.key, c);
   }
   const caseCounts: Record<string, number> = {};
