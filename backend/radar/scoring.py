@@ -243,11 +243,66 @@ def fixed_checks(r) -> list[dict]:
     elif r.method == "Direkte tildeling" and pd.notna(value) and value >= NATIONAL_THRESHOLD:
         out.append({"key": "direkte_over_terskel", "label": "Direkte tildeling over nasjonal terskelverdi",
                     "why": f"{value:,.0f} kr, terskel {NATIONAL_THRESHOLD:,.0f} kr".replace(",", " ")})
+    if ch := change_check(r):
+        out.append(ch)
     if short_deadline(r):
         out.append({"key": "kort_frist", "label": "Frist under lovens minstefrist",
                     "why": f"{r.tender_duration_days:.0f} dager fra utsendelse av {r.cn_ref} til frist, minstefrist "
                            f"{MIN_DEADLINE_ACCELERATED if r.cn_accelerated == 1 else MIN_DEADLINE[r.cn_procedure]} dager"})
     return out
+
+
+def contract_changes(con, df: pd.DataFrame) -> dict[str, list[dict]]:
+    """Endringskunngjøringer per kontrakt som telles. TED (can-modif) kobles på kunngjøringen som endres,
+    ellers på forløpet. Doffin-endringer er allerede koblet til tildelingen i observasjon (regel 3)."""
+    from .ingest.ted import MODIFICATION_REASONS, NOTICE_URL
+
+    dup = {r["contract_id"]: r["duplicate_of"] for r in con.execute("SELECT contract_id, duplicate_of FROM observasjon")}
+    counted = set(df.id[df.notice_type.eq("tildeling")])
+    by_proc: dict[str, list[str]] = {}
+    for i, p in zip(df.id, df.procedure_id):
+        if i in counted:
+            by_proc.setdefault(p, []).append(i)
+
+    def target(i):
+        for _ in range(3):  # duplikat av duplikat
+            if i in counted:
+                return i
+            i = dup.get(i)
+        return None
+
+    out: dict[str, list[dict]] = {}
+    for r in con.execute("SELECT * FROM contract_changes"):
+        ids = [t] if (t := target(r["previous_notice"])) else by_proc.get(r["procedure_id"], [])
+        for i in ids:
+            out.setdefault(i, []).append({"id": r["publication_number"], "source": "ted", "date": r["pub_date"],
+                                          "reason": MODIFICATION_REASONS.get(r["justification"] or "", r["justification"]),
+                                          "new_value": r["new_value"], "url": NOTICE_URL.format(pub=r["publication_number"])})
+    for r in con.execute("""SELECT o.contract_id, o.duplicate_of, c.pub_date, c.url FROM observasjon o
+                            JOIN contracts c ON c.id = o.contract_id WHERE o.notice_type = 'endring'"""):
+        if t := target(r["duplicate_of"]):
+            out.setdefault(t, []).append({"id": r["contract_id"], "source": "doffin", "date": r["pub_date"], "reason": None,
+                                          "new_value": None, "url": r["url"]})
+    return {k: sorted(v, key=lambda x: x["date"] or "") for k, v in out.items()}
+
+
+def change_check(r) -> dict | None:
+    """Kontrollpunkt når kontrakten har endringskunngjøringer. Observasjon: oppdragsgiveren har kunngjort en endring."""
+    ch = getattr(r, "endringer", None)
+    if r.notice_type != "tildeling" or not isinstance(ch, list) or not ch:
+        return None
+    last = ch[-1]
+    why = f"{len(ch)} endringskunngjøring{'er' if len(ch) > 1 else ''}, siste {last['date'] or 'uten dato'}"
+    why += f" ({'TED' if last['source'] == 'ted' else 'Doffin'} {last['id'].removeprefix('doffin-')})"
+    if reasons := list(dict.fromkeys(x["reason"] for x in ch if x["reason"])):
+        why += f". Oppgitt begrunnelse: {', '.join(reasons)}"
+    nv = next((x["new_value"] for x in reversed(ch) if x["new_value"]), None)
+    if nv:
+        before = r.award_value if pd.notna(r.award_value) else r.est_value
+        why += f". Verdi etter endring {nv:,.0f} kr".replace(",", " ")
+        if pd.notna(before) and before:
+            why += f" mot {before:,.0f} kr ved tildeling".replace(",", " ")
+    return {"key": "endret", "label": "Endringskunngjøring etter tildeling", "why": why}
 
 
 def buyer_type(orgform: str | None, name: str | None) -> str:
@@ -280,6 +335,8 @@ def score_all(con, log=print) -> int:
     suppliers_by_buyer = df.explode("winner_ids").groupby("buyer_id").winner_ids.agg(lambda s: set(s.dropna())).to_dict()
     flags, cri, bboost = [], [], []
     act = dismissals.active(con)
+    changes = contract_changes(con, df)
+    df["endringer"] = df.id.map(lambda i: changes.get(i))
     for r in df.itertuples():
         fl = rule_flags(r)
         c = {"id": r.id, "buyer_id": r.buyer_id, "winner_ids": r.winner_ids, "pub_date": r.pub_date, "cpv": r.cpv,

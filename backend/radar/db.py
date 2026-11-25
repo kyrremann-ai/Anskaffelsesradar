@@ -66,6 +66,18 @@ CREATE TABLE IF NOT EXISTS ted_competition (
     accelerated INTEGER
 );
 
+-- Endringskunngjøringer fra TED (can-modif): kontrakten er endret etter tildeling.
+-- Doffin-endringer ligger i contracts med notice_type «endring» og kobles i observasjon.
+CREATE TABLE IF NOT EXISTS contract_changes (
+    publication_number TEXT PRIMARY KEY,
+    pub_date TEXT,
+    procedure_id TEXT,
+    previous_notice TEXT,             -- kunngjøringen som endres (BT-1501), ofte tildelingen
+    justification TEXT,               -- eForms modification-justification (add-wss, mod-cir, mod-nons ...)
+    new_value REAL,                   -- samlet verdi etter endringen, når den er oppgitt (NOK)
+    description TEXT
+);
+
 CREATE TABLE IF NOT EXISTS scores (
     contract_id TEXT PRIMARY KEY REFERENCES contracts(id),
     priority REAL, tier TEXT, percentile REAL,
