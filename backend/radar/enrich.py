@@ -25,6 +25,7 @@ FLAGS = {
     "pep_person": ("Navnetreff: rolleinnehaver/eier på PEP-liste", 0.8, "OpenSanctions"),
     "reg_renhold": ("Ikke registrert som godkjent i renholdsregisteret", 1.2, "Arbeidstilsynet"),
     "reg_bemanning": ("Ikke registrert som godkjent i bemanningsregisteret", 1.2, "Arbeidstilsynet"),
+    "reg_bht": ("Ikke registrert som godkjent bedriftshelsetjeneste", 1.2, "Arbeidstilsynet"),
     "kofa_brudd": ("KOFA har konstatert brudd i saken", 1.0, "KOFA (1,5 ved ulovlig direkte anskaffelse)"),
 }
 
@@ -222,7 +223,7 @@ class ExtraIndex:
                 if reg in self.registers and cpv.startswith(prefixes):
                     st = self.registers[reg].get(sid)
                     if not _ok_status(st or ""):
-                        add(f"reg_{reg}", f"Ikke registrert som godkjent i {reg}sregisteret", 1.2,
+                        add(f"reg_{reg}", FLAGS[f"reg_{reg}"][0], 1.2,
                             f"Status: {st}" if st else "Finnes ikke i registeret", "arbeidstilsynet")
 
         # KOFA

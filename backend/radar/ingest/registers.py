@@ -1,6 +1,7 @@
 """Arbeidstilsynets godkjenningsregistre (åpne data, NLOD 2.0, oppdateres daglig).
 
 - Renhold:  https://registerdata.arbeidstilsynet.no/renhold_register.xml
+- BHT (godkjente bedriftshelsetjenester): https://registerdata.arbeidstilsynet.no/bht_register.xml
 - Bemanning: https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api (JSON, se openapi.arbeidstilsynet.no)
 
 Elementnavnene står i Arbeidstilsynets XSD (RegisterXML6.xsd). Parseren leter etter
@@ -21,8 +22,9 @@ RENHOLD_URL = "https://registerdata.arbeidstilsynet.no/renhold_register.xml"
 BEMANNING_URL = "https://data.arbeidstilsynet.no/bemanningsforetaksregisteret2/api"
 # CPV-koder der godkjenning kreves
 # Minste forventede antall virksomheter. Renholdsregisteret har flere tusen; langt færre betyr formatendring.
-MIN_ROWS = {"renhold": 1000, "bemanning": 200}
-CPV_PREFIX = {"renhold": ("9091",), "bemanning": ("7962", "7961")}
+MIN_ROWS = {"renhold": 1000, "bemanning": 200, "bht": 100}
+# CPV 85147 = bedriftshelsetjenester (arbeidsmiljøloven § 3-3: bedriftshelsetjenesten skal være godkjent)
+CPV_PREFIX = {"renhold": ("9091",), "bemanning": ("7962", "7961"), "bht": ("85147",)}
 
 
 def _local(tag: str) -> str:
@@ -44,12 +46,25 @@ def _json_records(node, inherited: dict | None = None):
                 yield from _json_records(v, status)
 
 
+def _xml_records(el, inherited: dict | None = None):
+    """Alle elementer i XML-treet med barnas tekst. Underenheter uten egen godkjenningsstatus arver hovedenhetens,
+    som i JSON-varianten (ellers fikk de status «Ukjent»)."""
+    kids = {_local(c.tag): (c.text or "").strip() for c in el}
+    status = {k: v for k, v in kids.items() if "status" in k and v} or (inherited or {})
+    # <Virksomhet><Hovedenhet>…status…</Hovedenhet><Underenheter>…</Underenheter></Virksomhet>
+    for h in (c for c in el if _local(c.tag) == "hovedenhet"):
+        status = {_local(x.tag): (x.text or "").strip() for x in h if "status" in _local(x.tag) and (x.text or "").strip()} or status
+    yield {**status, **{k: v for k, v in kids.items() if v or k not in status}}
+    for c in el:
+        yield from _xml_records(c, status)
+
+
 def parse(raw: bytes) -> list[dict]:
     """XML (renhold) eller JSON (bemanning). Leter etter objekter med orgnr og status."""
     if raw.lstrip()[:1] in (b"[", b"{"):
         records = _json_records(json.loads(raw))
     else:
-        records = ({_local(c.tag): (c.text or "").strip() for c in el} for el in ET.fromstring(raw).iter())
+        records = _xml_records(ET.fromstring(raw))
     out, seen = [], set()
     for kids in records:
         org = next((v for k, v in kids.items() if "organisasjonsnummer" in k or k in ("orgnr", "orgnummer")), None)

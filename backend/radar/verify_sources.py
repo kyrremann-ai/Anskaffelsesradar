@@ -87,6 +87,8 @@ def run() -> dict[str, dict]:
     checks = {"Regnskapsregisteret": _regnskap}
     if settings.renhold_register_url:
         checks["Renholdsregisteret"] = lambda: _register("renhold", settings.renhold_register_url)
+    if settings.bht_register_url:
+        checks["BHT-registeret"] = lambda: _register("bht", settings.bht_register_url)
     if settings.bemanning_register_url:
         checks["Bemanningsregisteret"] = lambda: _register("bemanning", settings.bemanning_register_url)
     if settings.opensanctions_license:

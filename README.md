@@ -139,6 +139,7 @@ Alle rader valideres med Pydantic før de lagres (`radar/ingest/validate.py`). K
 | Aksjonærregisteret (Skatteetaten) | Uttrekk `data/import/aksjonaer_<år>.csv.gz` (flere år side om side), lages med `python -m radar.ingest.owners <fil> --extract` | Fil fra Skatteetaten. Personopplysninger: ligger i privat datarepo (`RADAR_DATA_REPO`), aldri i dette repoet | felles eier med konkurrent (direkte eller via holdingselskap, inntil tre ledd), oppdragsgiver eier leverandør, eier har rolle hos oppdragsgiver, eier er lokalpolitiker (ubekreftet), konsernforhold |
 | Proff API | `PROFF_API_KEY` | Betalt avtale med Proff. Vi skraper ikke proff.no | eiere, som over |
 | Renholdsregisteret | `RENHOLD_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på renhold (CPV 9091) ikke godkjent |
+| Godkjente bedriftshelsetjenester | `BHT_REGISTER_URL` (XML) | Åpent (NLOD) | leverandør på bedriftshelsetjeneste (CPV 85147) ikke godkjent |
 | Bemanningsregisteret | `BEMANNING_REGISTER_URL` | Åpent (NLOD) | leverandør på vikar/bemanning (CPV 7962) ikke godkjent |
 | Kandidatlister (valg.no) | Fil i `data/import/kandidat*.csv` | Åpent | mulig kobling til lokalpolitiker (navn + fødselsår, samme kommune) |
 | OpenSanctions | `OPENSANCTIONS_URL` + `OPENSANCTIONS_LISENS` | CC BY-NC. All bruk i kommersiell virksomhet krever lisens, også compliance-screening. Av som standard; kunden tar med egen lisens | sanksjonert selskap/person, PEP blant roller/eiere |
