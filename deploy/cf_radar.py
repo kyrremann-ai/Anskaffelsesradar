@@ -11,6 +11,9 @@ Bruk (fra repo-roten):
   python deploy/cf_radar.py revoke kari@firma.no   # fjern tilgang + kast aktive sesjoner
   python deploy/cf_radar.py list                   # hvem har tilgang nå
   python deploy/cf_radar.py who                    # hvem har åpnet siden og når
+  python deploy/cf_radar.py aapne [timer]          # åpne siden for alle uten innlogging i N timer (standard 24)
+  python deploy/cf_radar.py lukk                   # lukk igjen (fjerner åpningen straks)
+  python deploy/cf_radar.py lukk-utlopt            # lukk åpninger som har passert utløpstiden (kjøres hver time)
   python deploy/cf_radar.py backup ut/             # eksporter sakene (SQL + antall rader) for sikkerhetskopi
   python deploy/cf_radar.py restore-test ut/       # gjenopprett kopien i en testdatabase og sammenlign antall
   python deploy/cf_radar.py migrer-eu              # flytt saker fra den gamle databasen til en ny med EU-jurisdiksjon
@@ -329,6 +332,36 @@ def revoke(email):
     print("tilgang fjernet og sesjoner kastet:", email)
 
 
+OPEN_PREFIX = "radar: offentlig til "
+
+
+def aapne(timer="24"):
+    # Bypass-policy for alle: Access slipper alle gjennom uten innlogging. API-et (/api) krever fortsatt
+    # Access-e-post i _middleware.js, så anonyme besøkende kan lese, men ikke skrive saker.
+    import datetime as dt
+    til = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=float(timer))).strftime("%Y-%m-%dT%H:%MZ")
+    for aid in app_ids():
+        if any(p["name"].startswith(OPEN_PREFIX) for p in policies(aid)):
+            print("allerede åpen:", aid)
+            continue
+        api("POST", f"/access/apps/{aid}/policies", {
+            "name": OPEN_PREFIX + til, "decision": "bypass", "include": [{"everyone": {}}],
+        })
+    print("åpen for alle til", til, "(UTC)")
+
+
+def lukk(bare_utlopt=False):
+    import datetime as dt
+    naa = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    n = 0
+    for aid in app_ids():
+        for p in policies(aid):
+            if p["name"].startswith(OPEN_PREFIX) and (not bare_utlopt or p["name"][len(OPEN_PREFIX):] <= naa):
+                api("DELETE", f"/access/apps/{aid}/policies/{p['id']}")
+                n += 1
+    print(f"lukket {n} åpning(er)" if n else "ingen åpning å lukke")
+
+
 def lst():
     for n in sorted({p["name"] for aid in app_ids() for p in policies(aid)}):
         print(n.removeprefix("radar: "))
@@ -344,7 +377,7 @@ def who():
 if __name__ == "__main__":
     c, *a = sys.argv[1:] or ["help"]
     cmds = {"setup": setup, "deploy": deploy, "grant": grant, "invite": invite, "revoke": revoke, "list": lst, "who": who,
-            "backup": backup, "restore-test": restore_test, "migrer-eu": migrer_eu, "kunder": kunder}
+            "aapne": aapne, "lukk": lukk, "lukk-utlopt": lambda: lukk(True), "backup": backup, "restore-test": restore_test, "migrer-eu": migrer_eu, "kunder": kunder}
     if c not in cmds:
         sys.exit(__doc__)
     if c != "kunder" and (not (len(ACC) == 32 and ACC.isalnum()) or len(TOK) < 30):
