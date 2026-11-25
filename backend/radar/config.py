@@ -24,6 +24,8 @@ class Settings:
     # Journalposter fra eInnsyn for prioriterte kontrakter (åpent API)
     einnsyn: bool = field(default_factory=lambda: _env("EINNSYN", "på").lower() not in ("av", "0", "false"))
     doffin: bool = field(default_factory=lambda: _env("DOFFIN", "på").lower() not in ("av", "0", "false"))
+    # eForms-XML per kjøring for nasjonale tildelinger (10 kall i minuttet hos Doffin)
+    doffin_xml_per_run: int = field(default_factory=lambda: int(_env("DOFFIN_XML_PER_RUN", "150")))
     mistral_api_key: str = field(default_factory=lambda: _env("MISTRAL_API_KEY"))
     # Billigste modell som skriver godt norsk. Bytt til mistral-medium-latest ved behov.
     mistral_model: str = field(default_factory=lambda: _env("MISTRAL_MODEL", "mistral-small-latest"))

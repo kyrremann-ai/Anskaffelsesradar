@@ -1,7 +1,7 @@
 """Doffin Public API v2 (DFØ). Krever gratis nøkkel fra DFØs API-portal (Azure APIM).
 
 GET https://api.doffin.no/public/v2/search  (30 kall/min) med header Ocp-Apim-Subscription-Key.
-GET https://api.doffin.no/public/v2/download/{id}  (10 kall/min, eForms-XML) brukes ikke i bulk.
+GET https://api.doffin.no/public/v2/download/{id}  (10 kall/min, eForms-XML) for nasjonale tildelinger, se enrich().
 
 To bruk:
 - refresh(): tildelinger (RESULT) som kontrakter. Søket gir kjøper, vinnere og antall tilbud,
@@ -203,3 +203,96 @@ def refresh(con, api_key: str, since: str, log=print) -> list[dict]:
     rows = [row for h in search_results(api_key, since, log=log) if f"doffin-{h.get('id')}" not in known and (row := parse_hit(h))]
     log(f"Doffin: {len(rows)} nye kunngjøringer")
     return rows
+
+
+# ------------------------------------------------------------------ eForms-XML for nasjonale tildelinger
+# Søket mangler prosedyre, tildelt verdi, rammeavtale og varighet. Kunngjøringen som eForms-XML har dem,
+# i samme format som TED, så TED-parseren brukes. Nedlastingen tåler 10 kall i minuttet, så vi henter
+# et begrenset antall per kjøring (nyeste først) og lagrer XML-en på disk. Resten tas neste natt.
+DOWNLOAD_URL = "https://api.doffin.no/public/v2/download/{id}"
+DOWNLOAD_PAUSE = 6.5
+# Felt fra XML-en som erstatter tomme felt fra søket. Id, kilde, oppdragsgiver og vinnere beholdes fra søket.
+XML_FIELDS = ["nature", "method", "accelerated", "justification", "framework", "est_value", "award_value",
+              "contract_months", "winner_size"]
+
+
+def _download(client: httpx.Client, notice_id: str, cache, tries: int = 4) -> bytes | None:
+    f = cache / f"{notice_id}.xml"
+    if f.exists():
+        return f.read_bytes() or None
+    for i in range(tries):
+        try:
+            r = client.get(DOWNLOAD_URL.format(id=notice_id), timeout=60)
+        except httpx.TransportError:
+            time.sleep(10 * (i + 1))
+            continue
+        if r.status_code == 404:
+            f.write_bytes(b"")  # finnes ikke som XML; ikke prøv igjen
+            return None
+        if r.status_code in (429, 500, 502, 503, 504):
+            after = r.headers.get("Retry-After")
+            time.sleep(float(after) if after and after.isdigit() else 30 * (i + 1))
+            continue
+        r.raise_for_status()
+        f.write_bytes(r.content)
+        return r.content
+    raise RateLimited(f"Doffin-nedlasting av {notice_id} feilet etter flere forsøk")
+
+
+def merge_xml(row: dict, parsed: dict) -> dict:
+    """Doffin-raden med felt fra eForms-XML. Tilbudstall fra søket beholdes hvis XML-en mangler det."""
+    out = dict(row)
+    for k in XML_FIELDS:
+        if parsed.get(k) not in (None, "", "Annet"):
+            out[k] = parsed[k]
+    if out.get("num_bidders") is None and parsed.get("num_bidders") is not None:
+        out["num_bidders"] = parsed["num_bidders"]
+    raw = dict(out.get("raw") or {})
+    raw.update({"xml": True, "procedure": parsed["raw"].get("procedure"), "reasons": parsed["raw"].get("reasons"),
+                "procedure_id": parsed["raw"].get("procedure_id")})
+    out["raw"] = raw
+    return out
+
+
+def enrich(con, api_key: str, cache, limit: int = 150, log=print) -> int:
+    """Henter eForms-XML for Doffin-tildelinger som ikke er beriket og ikke er kjent som TED-duplikat."""
+    from .ted import parse_notice
+
+    cache.mkdir(parents=True, exist_ok=True)
+    dups = {r["contract_id"] for r in con.execute("SELECT contract_id FROM observasjon WHERE duplicate_of IS NOT NULL")} \
+        if con.execute("SELECT 1 FROM sqlite_master WHERE name='observasjon'").fetchone() else set()
+    todo = []
+    for r in con.execute("SELECT * FROM contracts WHERE source='doffin' ORDER BY pub_date DESC"):
+        raw = json.loads(r["raw"] or "{}") or {}
+        if raw.get("xml") is not None or r["id"] in dups or notice_type(raw.get("doffin_type")) != "tildeling":
+            continue
+        todo.append(dict(r) | {"raw": raw})
+    rows, fetched = [], 0
+    with httpx.Client(headers=_headers(api_key)) as client:
+        for r in todo:
+            nid = r["id"].removeprefix("doffin-")
+            cached = (cache / f"{nid}.xml").exists()
+            if not cached and fetched >= limit:
+                continue  # resten neste kjøring, men bruk det som ligger i hurtigbufferen
+            try:
+                xml = _download(client, nid, cache)
+            except RateLimited as e:
+                log(f"  {e}; fortsetter neste kjøring")
+                break
+            if not cached:
+                fetched += 1
+                time.sleep(DOWNLOAD_PAUSE)
+            parsed = None
+            if xml:
+                try:
+                    parsed = parse_notice(xml, nid, r["pub_date"])
+                except Exception as e:  # noqa: BLE001 - én ødelagt kunngjøring skal ikke stoppe resten
+                    log(f"  Doffin {nid}: kunne ikke lese XML ({e})")
+            r["winner_ids"], r["winner_names"] = json.loads(r["winner_ids"] or "[]"), json.loads(r["winner_names"] or "[]")
+            rows.append(merge_xml(r, parsed) if parsed else r | {"raw": r["raw"] | {"xml": False}})
+    if rows:
+        from .. import db
+        db.upsert_contracts(con, rows)
+    left = len(todo) - len(rows)
+    log(f"Doffin XML: {len(rows)} beriket ({fetched} lastet ned), {left} gjenstår")
+    return len(rows)
