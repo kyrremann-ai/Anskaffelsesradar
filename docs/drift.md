@@ -15,6 +15,16 @@ Ny kunde:
 3. Actions → «Radar-tilgang» → `grant` med kunde og e-post for hver bruker.
 4. Nattjobben publiserer til alle kunder i fila. Kjør «Radar på Cloudflare» for hånd for å publisere med en gang.
 
+## Åpen visning
+
+`python deploy/cf_radar.py aapne [timer]` (eller workflow «Radar-åpning») slipper alle inn på siden uten innlogging i opptil 72 timer.
+Den timevise jobben lukker åpninger som har gått ut, og `cf_radar.py lukk` lukker med en gang.
+
+Regler:
+- Bare demoinstallasjonen (radar.vikingsea.no), aldri en kundeinstallasjon.
+- Mens siden er åpen kan alle lese JSON-filene, også Brreg-roller og eierdata. Saker og notater (`/api`) krever fortsatt innlogging.
+- Hold åpningen så kort som mulig, og bare når det er et konkret behov (for eksempel en ekstern gjennomgang).
+
 ## Varsling
 
 | Hva | Hvor | Blir rød når |

@@ -184,7 +184,7 @@ export default function Method() {
         <Card title="Personopplysninger og rettslig grunnlag" desc="Gjelder aksjonærregisteret, kandidatlister og roller i Brreg">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Formål:</b> å prioritere hvilke anskaffelser revisor bør se nærmere på. Ikke å vurdere enkeltpersoner.</li>
-            <li><b>Grunnlag:</b> revisjonens lovpålagte oppgave (kommuneloven kap. 24), jf. personvernforordningen art. 6 nr. 1 bokstav e. Anskaffelsesradar AS behandler opplysningene som databehandler for revisjonen. Grunnlaget og en vurdering av personvernkonsekvenser (DPIA) skal være på plass før personopplysninger tas i bruk hos en kunde.</li>
+            <li><b>Grunnlag:</b> revisjonens lovpålagte oppgave (kommuneloven kap. 24), jf. personvernforordningen art. 6 nr. 1 bokstav e. Vikingsea AS behandler opplysningene som databehandler for revisjonen. Grunnlaget og en vurdering av personvernkonsekvenser (DPIA) skal være på plass før personopplysninger tas i bruk hos en kunde.</li>
             <li><b>Dataminimering:</b> bare normalisert navn, fødselsår, kommune, valg og om personen ble valgt lagres fra kandidatlistene. Parti lagres ikke (særlig kategori, GDPR art. 9), og fødselsdato hashes fra Brreg. Fra aksjonærregisteret brukes bare eierposter på minst 5 %, og filen ligger kryptert utenfor det åpne kodelageret. Personnavn sendes aldri til språkmodellen.</li>
             <li><b>Treff er ikke bevis:</b> navn og fødselsår gir en <i>ubekreftet mulig kobling</i>, aldri en bekreftet identitet. Kandidat og innvalgt vises hver for seg. Aksjonærregisteret er et årsskiftebilde, ikke dagens eierskap.</li>
           </ul>

@@ -339,6 +339,10 @@ def aapne(timer="24"):
     # Bypass-policy for alle: Access slipper alle gjennom uten innlogging. API-et (/api) krever fortsatt
     # Access-e-post i _middleware.js, så anonyme besøkende kan lese, men ikke skrive saker.
     import datetime as dt
+    # Bare demoinstallasjonen, og høyst 72 timer: mens siden er åpen kan alle lese Brreg-roller og eierdata
+    # i JSON-filene (se docs/drift.md, «Åpen visning»)
+    if float(timer) > 72:
+        raise SystemExit("Åpen visning er begrenset til 72 timer")
     til = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=float(timer))).strftime("%Y-%m-%dT%H:%MZ")
     for aid in app_ids():
         if any(p["name"].startswith(OPEN_PREFIX) for p in policies(aid)):
