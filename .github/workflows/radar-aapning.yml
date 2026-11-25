@@ -1,0 +1,28 @@
+# Midlertidig åpning av radar.vikingsea.no uten innlogging (Access bypass for alle), med automatisk lukking.
+# «aapne» legger på en bypass-policy med utløpstid i navnet; jobben hver time fjerner den når tiden er ute.
+name: Radar-åpning
+on:
+  workflow_dispatch:
+    inputs:
+      kommando:
+        type: choice
+        options: [aapne, lukk, lukk-utlopt, list]
+        default: aapne
+      timer:
+        description: "Antall timer siden skal være åpen (for aapne)"
+        default: "24"
+  schedule:
+    - cron: "7 * * * *"   # hver time: lukk åpninger som har utløpt
+concurrency: radar-access
+jobs:
+  aapning:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      KOMMANDO: ${{ inputs.kommando || 'lukk-utlopt' }}
+      TIMER: ${{ inputs.timer || '24' }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          if [ "$KOMMANDO" = aapne ]; then python deploy/cf_radar.py aapne "$TIMER"; else python deploy/cf_radar.py "$KOMMANDO"; fi
