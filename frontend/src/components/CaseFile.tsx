@@ -201,14 +201,37 @@ function Supplier({ s }: { s: SupplierCard }) {
 
 const FIELD: Record<string, string> = { note: "notat", assignee: "ansvarlig", vurdering: "vurdering", vurdering_grunn: "begrunnelse" };
 
+// Ulagret notat og ansvarlig per kontrakt. Overlever bytte av sak, og en lagring fra en kollega
+// overskriver ikke det revisor holder på å skrive.
+const drafts = new Map<string, { note: string; assignee: string }>();
+
 function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
   const c = d.case;
-  const [note, setNote] = useState(c?.note ?? "");
-  const [assignee, setAssignee] = useState(c?.assignee ?? "");
+  const server = { note: c?.note ?? "", assignee: c?.assignee ?? "" };
+  const [note, setNoteState] = useState(drafts.get(d.id)?.note ?? server.note);
+  const [assignee, setAssigneeState] = useState(drafts.get(d.id)?.assignee ?? server.assignee);
   const [grunn, setGrunn] = useState(c?.vurdering_grunn ?? "");
   const [fileError, setFileError] = useState("");
-  useEffect(() => { setNote(c?.note ?? ""); setAssignee(c?.assignee ?? ""); setGrunn(c?.vurdering_grunn ?? ""); },
-    [c?.id, c?.note, c?.assignee, c?.vurdering_grunn]);
+  const draft = (patch: Partial<{ note: string; assignee: string }>) => {
+    const next = { note, assignee, ...patch };
+    if (next.note === server.note && next.assignee === server.assignee) drafts.delete(d.id); else drafts.set(d.id, next);
+  };
+  const setNote = (v: string) => { setNoteState(v); draft({ note: v }); };
+  const setAssignee = (v: string) => { setAssigneeState(v); draft({ assignee: v }); };
+  // Ny sak eller ny versjon fra serveren: vis kladden hvis det finnes en, ellers det som er lagret
+  useEffect(() => {
+    const k = drafts.get(d.id);
+    setNoteState(k?.note ?? server.note);
+    setAssigneeState(k?.assignee ?? server.assignee);
+    setGrunn(c?.vurdering_grunn ?? "");
+  }, [d.id, c?.id, c?.note, c?.assignee, c?.vurdering_grunn]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unsaved = !!c && (note !== server.note || assignee !== server.assignee);
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
   const done = () => queryClient.invalidateQueries();
   const create = useMutation({ mutationFn: () => api("/api/cases", { method: "POST", body: JSON.stringify({ contractId: d.id }) }), onSuccess: done });
   const patch = useMutation({
@@ -255,7 +278,8 @@ function CasePanel({ d, statuses }: { d: ContractDetail; statuses: string[] }) {
           className="mt-1 w-full rounded-md border border-line bg-surface p-2 text-sm text-fg" />
       </label>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => patch.mutate({ note, assignee })} disabled={!dirty || patch.isPending}>Lagre</Button>
+        <Button onClick={() => patch.mutate({ note, assignee }, { onSuccess: () => drafts.delete(d.id) })} disabled={!dirty || patch.isPending}>Lagre</Button>
+        {dirty && <span className="self-center text-xs text-hi">Ulagrede endringer</span>}
         {STATIC
           ? <Button variant="outline" onClick={() => saveWorkpaper(String(c.id)).catch((e) => setFileError(String(e.message)))}>Last ned arbeidspapir</Button>
           : <a className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line px-3 text-sm font-medium transition-colors duration-150 hover:border-field hover:bg-sunk"

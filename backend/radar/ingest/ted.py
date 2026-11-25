@@ -162,7 +162,7 @@ def parse_notice(xml: bytes, pub: str, pub_date: str) -> dict | None:
         "est_value": est, "award_value": award, "tender_duration_days": None, "contract_months": months,
         "winner_ids": [orgs[w]["orgnr"] or w for w in winners], "winner_names": [orgs[w]["name"] for w in winners],
         "winner_size": SIZE.get(orgs[winners[0]]["size"] or "", None) if winners else None,
-        "raw": {"procedure": proc_code, "reasons": reasons, "buyer_nuts": buyer.get("nuts"),
+        "raw": {"min_bidders": min(bidders) if len(bidders) > 1 else None, "procedure": proc_code, "reasons": reasons, "buyer_nuts": buyer.get("nuts"),
                 "procedure_id": _t(root, "cbc:ContractFolderID")},
     }
 
@@ -266,7 +266,7 @@ def parse_fields(n: dict) -> dict | None:
         "est_value": est, "award_value": award, "tender_duration_days": None, "contract_months": months,
         "winner_ids": list(winners), "winner_names": list(winners.values()),
         "winner_size": SIZE.get(_first(n.get("winner-size")) or "", None),
-        "raw": {"procedure": proc, "reasons": {"accelerated-procedure": str(accelerated).lower(),
+        "raw": {"min_bidders": min(bidders) if len(bidders) > 1 else None, "procedure": proc, "reasons": {"accelerated-procedure": str(accelerated).lower(),
                                                **({"direct-award-justification": justification} if justification else {})},
                 "buyer_nuts": nuts, "procedure_id": _first(n.get("procedure-identifier")),
                 **({"value_note": value_note} if value_note else {})},

@@ -56,7 +56,7 @@ export default function Buyers() {
           <tbody>
             {rows.map((b) => (
               <tr key={b.buyer_id} className="group border-t border-line hover:bg-sunk">
-                <td className="sticky left-0 z-10 max-w-[45vw] bg-surface px-3 py-2 group-hover:bg-sunk sm:max-w-none"><Link to={`/arbeid`} onClick={() => setBuyers([b.buyer_id!])} className="font-medium hover:underline" title="Sett som mine enheter og åpne arbeidsflaten">{b.name}</Link></td>
+                <td className="sticky left-0 z-10 max-w-[45vw] bg-surface px-3 py-2 group-hover:bg-sunk sm:max-w-none"><Link to={`/arbeid?buyer=${encodeURIComponent(b.buyer_id!)}`} className="font-medium hover:underline" title="Åpne kontraktene i arbeidsflaten (endrer ikke «Mine enheter»)">{b.name}</Link></td>
                 <td className="num px-3 text-right">{int(b.n)}</td>
                 <td className="num px-3 text-right">{int(b.n_flagged)}</td>
                 <td className="num px-3 text-right">{pct(b.single_bid_pct, 0)}</td>

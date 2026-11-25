@@ -171,6 +171,9 @@ def entity_summary(data: dict) -> dict:
         "orgform": (data.get("organisasjonsform") or {}).get("kode"),
         "stiftet": data.get("stiftelsesdato") or data.get("registreringsdatoEnhetsregisteret"),
         "nace": nace, "nace_seksjon": nace_section(nace), "nace_tekst": (data.get("naeringskode1") or {}).get("beskrivelse"),
+        # Alle registrerte næringskoder (1–3); bransjeavvik flagges bare når ingen av dem passer
+        "nace_seksjoner": sorted({x for k in ("naeringskode1", "naeringskode2", "naeringskode3")
+                                  if (x := nace_section((data.get(k) or {}).get("kode")))}),
         "ansatte": data.get("antallAnsatte"),
         # True uten antall: virksomheten har ansatte i Aa-registeret, men Brreg viser ikke tallet
         "har_ansatte": data.get("harRegistrertAntallAnsatte"), "mva": data.get("registrertIMvaregisteret"),
@@ -268,7 +271,7 @@ class BrregIndex:
             if sid in self.dead:
                 add("brreg_dead_role", "Rolleinnehaver registrert som død", 0.4, "Registeret er ikke oppdatert")
             exp = CPV_TO_NACE.get(str(c.get("cpv") or "")[:2])
-            if exp and s["nace_seksjon"] and s["nace_seksjon"] not in exp:
+            if exp and s["nace_seksjon"] and not set(s.get("nace_seksjoner") or [s["nace_seksjon"]]) & set(exp):
                 add("brreg_nace", "Mulig avvik mellom registrert bransje og anskaffelseskategori", 0.5,
                     f"CPV {str(c.get('cpv'))[:2]} mot NACE {s['nace']} {s['nace_tekst'] or ''}".strip())
             sp = self.people.get(sid, set())
