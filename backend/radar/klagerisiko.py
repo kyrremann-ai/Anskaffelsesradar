@@ -42,6 +42,20 @@ SLOW = 4.0
 BUYER_TYPES = [("kommune", r"kommune|bydel|kf\b"), ("fylke", r"fylkeskommune"), ("helse", r"\bhf\b|helse|sykehus"),
                ("innkjøpssamarbeid", r"innkjøp|anskaffelser|iks\b"), ("stat", r"direktorat|departement|etaten|tilsyn|statens|"
                                                                       r"forsvar|politi|universitet|høgskole")]
+STATE = dict(BUYER_TYPES)["stat"]
+
+
+# EØS-terskelverdier (kr ekskl. mva), FOA § 5-3. Fra 21.4.2026 (forskrift 21. april 2026 nr. 623):
+# 1,63 mill. stat, 2,5 mill. andre, 62,9 mill. bygg og anlegg. Før det brukes 1,4 / 2,2 mill.
+# (satsene fra 2022) som tilnærming; bygg og anlegg bruker dagens sats for hele perioden.
+EOS_CHANGE = "2026-04-21"
+
+
+def eos_threshold(issue_date: str | None, state: bool, works: bool) -> float:
+    if works:
+        return 62.9e6
+    new = (issue_date or "") >= EOS_CHANGE
+    return (1.63e6 if new else 1.4e6) if state else (2.5e6 if new else 2.2e6)
 
 
 def fetch_sample(cache: Path, start: str, end: str | None = None, pages_per_month: int = 3, seed: int = 42, log=print) -> int:
@@ -95,7 +109,8 @@ def features(h: dict) -> dict:
         "desc_len": np.log1p(len(h.get("description") or "")),
         "framework": float("rammeavtale" in text),
         "works": float(cpv[:2] == "45"), "services": float(cpv[:1] in "5679" and cpv[:2] != "45"),
-        "eos": float("eøs" in text or (est or 0) > 1.4e6),
+        "eos": float("eøs" in text or (est or 0) >= eos_threshold((h.get("issueDate") or "")[:10] or None,
+                                                                   bool(re.search(STATE, buyer)), cpv[:2] == "45")),
     }
     for name, pat in BUYER_TYPES:
         f[f"buyer_{name}"] = float(bool(re.search(pat, buyer)))
@@ -179,13 +194,16 @@ def contract_features(df: pd.DataFrame) -> pd.DataFrame:
     est = pd.to_numeric(df.est_value, errors="coerce")
     cpv = df.cpv.fillna("").astype(str)
     buyer = df.buyer.fillna("").map(norm_name)
+    state = buyer.str.contains(STATE, regex=True)
+    limit = pd.Series([eos_threshold(d, s, w) for d, s, w in zip(df.pub_date.fillna("").astype(str).str[:10], state,
+                                                                   cpv.str[:2] == "45")], index=df.index)
     X = pd.DataFrame({
         "log_est_value": np.log10(est.where(est > 0)),
         "tender_days": pd.to_numeric(df.tender_duration_days, errors="coerce"),
         "framework": pd.to_numeric(df.framework, errors="coerce").fillna(0).clip(0, 1),
         "works": (cpv.str[:2] == "45").astype(float),
         "services": (cpv.str[:1].isin(list("5679")) & (cpv.str[:2] != "45")).astype(float),
-        "eos": ((df.source == "ted") | (est > 1.4e6)).astype(float),
+        "eos": ((df.source == "ted") | (est >= limit)).astype(float),
     }, index=df.index)
     for name, pat in BUYER_TYPES:
         X[f"buyer_{name}"] = buyer.str.contains(pat, regex=True).astype(float)

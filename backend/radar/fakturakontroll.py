@@ -13,7 +13,21 @@ from datetime import date, timedelta
 from .ingest.brreg import PUBLIC_FORMS
 from .scoring import NATIONAL_THRESHOLD
 
-PROTOCOL_LIMIT = 100_000  # anskaffelser over 100 000 kr skal dokumenteres (FOA § 7-1)
+# Nedre grense for anskaffelsesloven (§ 2): 100 000 kr ekskl. mva, hevet til 500 000 kr fra 1.7.2026
+# (lov 6. mars 2026 nr. 8). Kjøp før og etter endringen vurderes hver for seg mot grensen som gjaldt.
+LAW_CHANGE = date(2026, 7, 1)
+LIMIT_BEFORE, LIMIT_FROM = 100_000, 500_000
+
+
+def _kr(v: float) -> str:
+    return f"{v:,.0f}".replace(",", " ")
+
+
+def lower_limit(d: date) -> int:
+    """Anskaffelseslovens nedre grense (kr ekskl. mva) som gjaldt på datoen."""
+    return LIMIT_FROM if d >= LAW_CHANGE else LIMIT_BEFORE
+
+
 OVER_CONTRACT = 1.2  # fakturert mer enn 20 % over kunngjort kontraktsverdi
 
 
@@ -70,9 +84,19 @@ def analyse(con, buyers: set[str] | None = None) -> dict:
             if peak >= NATIONAL_THRESHOLD:
                 checks.append({"key": "uten_kontrakt_over_terskel", "label": "Kjøp over nasjonal terskelverdi uten kunngjort kontrakt",
                                "why": f"{peak:,.0f} kr på 12 måneder fra {peak_from}; ingen kontrakt eller intensjon i TED/Doffin".replace(",", " ")})
-            elif peak >= PROTOCOL_LIMIT:
-                checks.append({"key": "uten_kontrakt_over_100k", "label": "Kjøp over 100 000 kr uten kunngjort kontrakt",
-                               "why": f"{peak:,.0f} kr på 12 måneder; protokollplikt etter FOA § 7-1".replace(",", " ")})
+            else:
+                # Hver periode mot grensen som gjaldt da, så et vindu ikke blander gammel og ny grense
+                for part in ([x for x in lines if x[0] < LAW_CHANGE], [x for x in lines if x[0] >= LAW_CHANGE]):
+                    if not part:
+                        continue
+                    p, p_from = _max_12m(part)
+                    limit = lower_limit(part[0][0])
+                    if p >= limit:
+                        when = "fra 1.7.2026" if limit == LIMIT_FROM else "før 1.7.2026"
+                        checks.append({"key": "uten_kontrakt_over_lovgrense", "label": f"Kjøp over {_kr(limit)} kr uten kunngjort kontrakt",
+                                       "why": f"{_kr(p)} kr på 12 måneder fra {p_from}; anskaffelsesloven gjelder fra "
+                                              f"{_kr(limit)} kr ekskl. mva ({when}, § 2)"})
+                        break
         if value and not any(c["framework"] for c in awarded) and total > OVER_CONTRACT * value:
             checks.append({"key": "over_kontraktsverdi", "label": "Fakturert mer enn kunngjort kontraktsverdi",
                            "why": f"{total:,.0f} kr fakturert mot {value:,.0f} kr kunngjort".replace(",", " ")})
