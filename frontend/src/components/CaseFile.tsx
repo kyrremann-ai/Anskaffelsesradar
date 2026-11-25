@@ -42,7 +42,7 @@ function Section({ title, children, right }: { title: string; children: React.Re
 }
 
 // Revisor avskriver et flagg som falsk positiv, med årsakskode. Logges i saken og teller ikke i prioriteten.
-// Ikke i den statiske versjonen (ingen server å lagre på).
+// Cloudflare-versjonen lagrer avskrivningen i D1 (deploy/cloudflare/functions/api/dismissals).
 function Dismiss({ d, f }: { d: ContractDetail; f: Flag }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -128,7 +128,7 @@ function FlagList({ flags, d }: { flags: Flag[]; d?: ContractDetail }) {
                   {f.why && <div className="mt-0.5 text-xs text-muted">{isoDatesInText(f.why)}</div>}
                   {f.data_note && <div className="mt-0.5 text-xs text-mid">{f.data_note}</div>}
                   {f.checks?.length ? <Checks checks={f.checks} /> : null}
-                  {d && !STATIC && !dq && <Dismiss d={d} f={f} />}
+                  {d && !dq && <Dismiss d={d} f={f} />}
                 </li>
               ))}
             </ul>
