@@ -1,2 +1,5 @@
+# Hele siden ligger bak Cloudflare Access, så roboter slipper uansett ikke inn uten innlogging.
+# Crawling er tillatt slik at LLM-verktøy kan lese siden når Kyrre midlertidig åpner den (workflow Radar-åpning).
+# X-Robots-Tag: noindex i _headers holder den fortsatt ute av søkemotorenes indeks.
 User-agent: *
-Disallow: /
+Allow: /

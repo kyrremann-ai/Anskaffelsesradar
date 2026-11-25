@@ -1,0 +1,20 @@
+# Øyeblikksbilde av radaren (skjermbilder + rendret tekst/HTML uten JS) mens den er åpnet med Radar-åpning.
+# Resultatet lastes opp som artefakt «radar-snapshot» (slettes etter 3 dager).
+name: Radar-øyeblikksbilde
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        default: "https://radar.vikingsea.no"
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: |
+          cd deploy/snapshot && npm init -y >/dev/null && npm i playwright@1.49.1 && npx playwright install --with-deps chromium
+          node snapshot.mjs "${{ inputs.url }}" "$GITHUB_WORKSPACE/snapshot-out"
+      - uses: actions/upload-artifact@v4
+        with: { name: radar-snapshot, path: snapshot-out, retention-days: 3 }
