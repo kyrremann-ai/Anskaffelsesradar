@@ -1,16 +1,19 @@
 # Databehandlere og underleverandører
 
 Oversikt for DPIA og databehandleravtale med kunden. Vikingsea AS er databehandler for kunden (kommunerevisjonen).
-Oppdateres når en leverandør eller et lagringssted endres. Sist gjennomgått: 2026-10-28.
+Oppdateres når en leverandør eller et lagringssted endres. Sist gjennomgått: 2026-11-25.
 
 ## Cloudflare-versjonen (pilot)
 
 | Leverandør | Rolle | Data | Lagringssted | Overføringsgrunnlag | Avtale |
 |---|---|---|---|---|---|
 | Cloudflare, Inc. | Hosting (Pages), database (D1), innlogging (Access, engangskode på e-post) | Saker, notater, vurderinger, logg; e-postadresser og innloggingslogg; offentlige kontraktsdata og Brreg-roller (navn, fødselsår) i JSON-filene | D1 med jurisdiksjon EU (etter `migrer-eu`). Pages-filer og Access-logg i Cloudflares globale nett | EU–US Data Privacy Framework, SCC i Cloudflares DPA | Cloudflare DPA (del av Self-Serve Subscription Agreement) |
+| Anthropic PBC | AI-vurderinger, laget på forhånd i en nattlig jobb (`radar/ai_vurderinger.py`) og lagt inn i JSON-filene ved bygging | Kontraktsfelt og flagg fra offentlige kunngjøringer (`llm.py:build_input`). Aldri personnavn, Brreg-roller, eierdata, kundens saker, notater eller fakturaer | USA | DPF, SCC i Anthropics DPA | Anthropic Commercial Terms med DPA |
 | GitHub, Inc. (Microsoft) | Kjører nattjobben (Actions), lagrer kryptert sikkerhetskopi (90 dager) og hurtigbuffer med innhentede data | Kryptert kopi av saker; i hurtigbufferen: offentlige kontraktsdata, Brreg-roller, kandidatlister | USA/globalt | DPF, SCC i GitHub DPA | GitHub Data Protection Agreement |
 
-AI-vurdering er av i Cloudflare-versjonen. Ingen data sendes til en språkmodell.
+AI-vurderingene i demoen (radar.vikingsea.no) lages med Claude (Anthropic) på offentlige kontraktsdata. Ingen kundedata eller personopplysninger sendes til språkmodellen. Før en kunde tar i bruk egne data (saker, notater, fakturaer), byttes AI-vurderingen til Mistral (EU) eller slås av for den installasjonen, og denne tabellen oppdateres.
+
+**Åpen visning (`cf_radar.py aapne`):** mens siden er åpnet for alle, kan hvem som helst lese JSON-filene, også Brreg-roller (navn, fødselsår) og eierdata. API-et med saker og notater krever fortsatt innlogging. Åpen visning brukes bare kortvarig på demoinstallasjonen, aldri på en kundeinstallasjon, og lukkes automatisk (workflow «Radar-åpning»). Se [drift.md](drift.md).
 
 ## Serverversjonen (Hetzner, ikke i drift)
 
