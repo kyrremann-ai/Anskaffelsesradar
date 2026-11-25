@@ -108,9 +108,70 @@ function db(): Promise<any | null> {
         if (first) { first = false; resolve(); } else onChange();
       }, () => { if (first) { first = false; resolve(); } });
     });
+    // Avskrevne flagg (Cloudflare: D1 via /api/dismissals). Mangler samlingen, er det bare ingen avskrivninger.
+    await new Promise<void>((resolve) => {
+      let first = true;
+      try {
+        d.collection("dismissals").onSnapshot((snap: any) => {
+          dismissals.clear();
+          for (const doc of snap.docs) dismissals.set(doc.id, doc.data());
+          if (first) { first = false; resolve(); } else onChange();
+        }, () => { if (first) { first = false; resolve(); } });
+      } catch { resolve(); }
+    });
     return d;
   })();
   return dbReady;
+}
+
+// ------------------------------------------------------------------ avskrevne flagg (som dismissals.py og api.py)
+
+type StoredDismissal = { contract_id: string; flag_key: string; reason: string; note: string; scope: "kontrakt" | "leverandor";
+  orgnr: string | null; actor: string; at: string; revoked_at: string | null; revoked_by?: string | null };
+const dismissals = new Map<string, StoredDismissal>();
+const REASONS: [string, string, boolean][] = [
+  ["konsern", "Legitimt konsern eller felles eierskap", true],
+  ["rammeavtale", "Kjent rammeavtale eller avrop", false],
+  ["navnelikhet", "Navnelikhet eller feil kobling av person", true],
+  ["datafeil", "Feil eller mangel i kildedataene", false],
+  ["forklart", "Forklart og dokumentert av oppdragsgiver", false],
+  ["annet", "Annet (begrunn i notatet)", false],
+];
+
+function findDismissal(r: Row, key: string): [string, StoredDismissal] | null {
+  let sup: [string, StoredDismissal] | null = null;
+  for (const e of dismissals) {
+    const d = e[1];
+    if (d.revoked_at || d.flag_key !== key) continue;
+    if (d.scope === "kontrakt" && d.contract_id === r.id) return e;
+    if (d.scope === "leverandor" && d.orgnr && r.winner_ids.includes(d.orgnr)) sup ??= e;
+  }
+  return sup;
+}
+
+// Avskrevne flagg merkes og bidraget trekkes fra prioriteten med en gang, som i serverversjonen.
+// Nivå og persentil regnes på nytt først ved neste nattlige bygging.
+function overlay(rows: Row[]): Row[] {
+  if (![...dismissals.values()].some((d) => !d.revoked_at)) return rows;
+  return rows.map((r) => {
+    let minus = 0, hit = false;
+    const flags = r.flags.map((f) => {
+      const e = findDismissal(r, f.key);
+      if (!e) return f;
+      hit = true;
+      minus += f.bidrag ?? 0;
+      const [id, d] = e;
+      return { ...f, bidrag: 0, dismissed: { id: id as unknown as number, scope: d.scope, reason: d.reason, note: d.note, actor: d.actor, at: d.at, orgnr: d.orgnr } };
+    });
+    return hit ? { ...r, flags, priority: Math.max(0, r.priority - minus) } : r;
+  });
+}
+
+async function caseEvent(contractId: string, field: string, old: string | null, neu: string | null) {
+  const key = keyOf(contractId), c = cases.get(key);
+  if (!c) return;
+  const now = new Date().toISOString();
+  await saveCase(key, { ...c, updated_at: now, events: [...c.events, { at: now, ...(await actor()), field, old, new: neu }] });
 }
 
 let userNs: Promise<any | null> | null = null;
@@ -354,9 +415,41 @@ export async function staticApi(url: string, init?: RequestInit): Promise<unknow
   const u = new URL(url, "http://x");
   const p = u.searchParams, path = u.pathname, method = (init?.method ?? "GET").toUpperCase();
   const body = init?.body ? JSON.parse(String(init.body)) : {};
-  const { rows, cards, meta, model } = await load();
-  await db();
+  const { rows: loaded, cards, meta, model } = await load();
+  const d = await db();
+  const rows = overlay(loaded);
   let m: RegExpMatchArray | null;
+
+  if (path === "/api/dismissal-reasons") return REASONS.map(([code, label, supplier_scope]) => ({ code, label, supplier_scope }));
+  if ((m = path.match(/^\/api\/contracts\/(.+)\/flags\/([^/]+)\/dismiss$/)) && method === "POST") {
+    if (!d) throw new HttpError("Avskrivning krever innlogget versjon med database.");
+    const cid = decodeURIComponent(m[1]), key = decodeURIComponent(m[2]);
+    const r = rows.find((x) => x.id === cid);
+    const flag = r?.flags.find((f) => f.key === key);
+    if (!r || !flag) throw new HttpError("Flagget finnes ikke på kontrakten");
+    if (flag.dismissed) throw new HttpError("Flagget er allerede avskrevet");
+    const scope = body.scope === "leverandor" ? "leverandor" : "kontrakt";
+    const orgnr = scope === "leverandor" ? (body.orgnr ?? (r.winner_ids.length === 1 ? r.winner_ids[0] : null)) : null;
+    if (scope === "leverandor" && (!orgnr || !r.winner_ids.includes(orgnr))) throw new HttpError("Velg hvilken leverandør avskrivningen gjelder");
+    const id = `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const res = await d.doc(`dismissals/${id}`).set({ contract_id: cid, flag_key: key, reason: body.reason, note: body.note ?? "", scope, orgnr })
+      .catch((e: any) => { throw new HttpError(e?.message ?? String(e)); });
+    dismissals.set(id, res?.dismissal ?? { contract_id: cid, flag_key: key, reason: body.reason, note: (body.note ?? "").trim(), scope, orgnr,
+      actor: (await actor()).actor, at: new Date().toISOString(), revoked_at: null });
+    const label = Object.fromEntries(REASONS.map(([c, t]) => [c, t]))[body.reason] ?? body.reason;
+    await caseEvent(cid, "flagg avskrevet", flag.label, `${label}${orgnr ? ` (gjelder leverandør ${orgnr} overalt)` : ""}`);
+    return { id, contract: null };
+  }
+  if ((m = path.match(/^\/api\/dismissals\/([^/]+)$/)) && method === "DELETE") {
+    if (!d) throw new HttpError("Avskrivning krever innlogget versjon med database.");
+    const id = m[1], old = dismissals.get(id);
+    if (!old || old.revoked_at) throw new HttpError("Fant ikke en aktiv avskrivning");
+    const res = await d.doc(`dismissals/${id}`).set({ revoked: true }).catch((e: any) => { throw new HttpError(e?.message ?? String(e)); });
+    dismissals.set(id, res?.dismissal ?? { ...old, revoked_at: new Date().toISOString() });
+    const flag = loaded.find((x) => x.id === old.contract_id)?.flags.find((f) => f.key === old.flag_key);
+    await caseEvent(old.contract_id, "avskrivning angret", flag?.label ?? old.flag_key, null);
+    return { ok: true };
+  }
 
   if (path === "/api/meta") return meta;
   if (path === "/api/model") return model;
