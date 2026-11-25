@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?><ContractAwardNotice xmlns="urn:oasis:names:specification:ubl:schema:xsd:ContractAwardNotice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:efac="http://data.europa.eu/p27/eforms-ubl-extension-aggregate-components/1" xmlns:efbc="http://data.europa.eu/p27/eforms-ubl-extension-basic-components/1" xmlns:efext="http://data.europa.eu/p27/eforms-ubl-extensions/1" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
+  <ext:UBLExtensions>
+    <ext:UBLExtension>
+      <ext:ExtensionContent>
+        <efext:EformsExtension>
+          <efbc:TransmissionDate>2026-11-23+00:00</efbc:TransmissionDate>
+          <efbc:TransmissionTime>13:00:56+00:00</efbc:TransmissionTime>
+          <efac:NoticeResult>
+            <cbc:TotalAmount currencyID="NOK">1800000</cbc:TotalAmount>
+            <efac:LotResult>
+              <cbc:ID schemeName="result">RES-0001</cbc:ID>
+              <cbc:TenderResultCode listName="winner-selection-status">selec-w</cbc:TenderResultCode>
+              <efac:AppealRequestsStatistics>
+                <efbc:StatisticsCode listName="review-type">complainants</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>0</efbc:StatisticsNumeric>
+              </efac:AppealRequestsStatistics>
+              <efac:LotTender>
+                <cbc:ID schemeName="tender">TEN-0001</cbc:ID>
+              </efac:LotTender>
+              <efac:LotTender>
+                <cbc:ID schemeName="tender">TEN-0002</cbc:ID>
+              </efac:LotTender>
+              <efac:ReceivedSubmissionsStatistics>
+                <efbc:StatisticsCode listName="received-submission-type">tenders</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>4</efbc:StatisticsNumeric>
+              </efac:ReceivedSubmissionsStatistics>
+              <efac:ReceivedSubmissionsStatistics>
+                <efbc:StatisticsCode listName="received-submission-type">t-esubm</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>4</efbc:StatisticsNumeric>
+              </efac:ReceivedSubmissionsStatistics>
+              <efac:ReceivedSubmissionsStatistics>
+                <efbc:StatisticsCode listName="received-submission-type">t-oth-eea</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>0</efbc:StatisticsNumeric>
+              </efac:ReceivedSubmissionsStatistics>
+              <efac:ReceivedSubmissionsStatistics>
+                <efbc:StatisticsCode listName="received-submission-type">t-no-eea</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>0</efbc:StatisticsNumeric>
+              </efac:ReceivedSubmissionsStatistics>
+              <efac:ReceivedSubmissionsStatistics>
+                <efbc:StatisticsCode listName="received-submission-type">t-sme</efbc:StatisticsCode>
+                <efbc:StatisticsNumeric>0</efbc:StatisticsNumeric>
+              </efac:ReceivedSubmissionsStatistics>
+              <efac:SettledContract>
+                <cbc:ID schemeName="contract">CON-0001</cbc:ID>
+              </efac:SettledContract>
+              <efac:TenderLot>
+                <cbc:ID schemeName="Lot">LOT-0000</cbc:ID>
+              </efac:TenderLot>
+            </efac:LotResult>
+            <efac:LotTender>
+              <cbc:ID schemeName="tender">TEN-0001</cbc:ID>
+              <cac:LegalMonetaryTotal>
+                <cbc:PayableAmount currencyID="NOK">1799644</cbc:PayableAmount>
+              </cac:LegalMonetaryTotal>
+              <efac:SubcontractingTerm>
+                <efbc:TermCode listName="applicability">no</efbc:TermCode>
+              </efac:SubcontractingTerm>
+              <efac:TenderingParty>
+                <cbc:ID schemeName="tendering-party">TPA-0001</cbc:ID>
+              </efac:TenderingParty>
+              <efac:TenderLot>
+                <cbc:ID schemeName="Lot">LOT-0000</cbc:ID>
+              </efac:TenderLot>
+              <efac:TenderReference>
+                <cbc:ID>Utredning om omfang og utvikling av barne- og ungdomskriminalitet - OsloMet- storbyuniversitetet NIBR</cbc:ID>
+              </efac:TenderReference>
+            </efac:LotTender>
+            <efac:LotTender>
+              <cbc:ID schemeName="tender">TEN-0002</cbc:ID>
+              <cac:LegalMonetaryTotal>
+                <cbc:PayableAmount currencyID="NOK">1799644</cbc:PayableAmount>
+              </cac:LegalMonetaryTotal>
+              <efac:SubcontractingTerm>
+                <efbc:TermCode listName="applicability">no</efbc:TermCode>
+              </efac:SubcontractingTerm>
+              <efac:TenderingParty>
+                <cbc:ID schemeName="tendering-party">TPA-0001</cbc:ID>
+              </efac:TenderingParty>
+              <efac:TenderLot>
+                <cbc:ID schemeName="Lot">LOT-0000</cbc:ID>
+              </efac:TenderLot>
+              <efac:TenderReference>
+                <cbc:ID>Utredning om omfang og utvikling av barne- og ungdomskriminalitet</cbc:ID>
+              </efac:TenderReference>
+            </efac:LotTender>
+            <efac:SettledContract>
+              <cbc:ID schemeName="contract">CON-0001</cbc:ID>
+              <cbc:IssueDate>2026-11-18Z</cbc:IssueDate>
+              <cac:SignatoryParty>
+                <cac:PartyIdentification>
+                  <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+                </cac:PartyIdentification>
+              </cac:SignatoryParty>
+              <efac:ContractReference>
+                <cbc:ID>Utredning om omfang og utvikling av barne- og ungdomskriminalitet - OsloMet- storbyuniversitetet NIBR</cbc:ID>
+              </efac:ContractReference>
+              <efac:LotTender>
+                <cbc:ID schemeName="tender">TEN-0001</cbc:ID>
+              </efac:LotTender>
+            </efac:SettledContract>
+            <efac:TenderingParty>
+              <cbc:ID schemeName="tendering-party">TPA-0001</cbc:ID>
+              <efac:Tenderer>
+                <cbc:ID schemeName="organization">ORG-0003</cbc:ID>
+              </efac:Tenderer>
+            </efac:TenderingParty>
+          </efac:NoticeResult>
+          <efac:NoticeSubType>
+            <cbc:SubTypeCode listName="notice-subtype">29</cbc:SubTypeCode>
+          </efac:NoticeSubType>
+          <efac:Organizations>
+            <efac:Organization>
+              <efac:Company>
+                <cbc:WebsiteURI>https://www.regjeringen.no/no/dep/bld/id298/</cbc:WebsiteURI>
+                <cac:PartyIdentification>
+                  <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+                </cac:PartyIdentification>
+                <cac:PartyName>
+                  <cbc:Name languageID="NOR">Barne- og familiedepartementet</cbc:Name>
+                </cac:PartyName>
+                <cac:PartyName>
+                  <cbc:Name languageID="ENG">Barne- og familiedepartementet</cbc:Name>
+                </cac:PartyName>
+                <cac:PostalAddress>
+                  <cbc:StreetName>Postboks 8036 Dep</cbc:StreetName>
+                  <cbc:CityName>OSLO</cbc:CityName>
+                  <cbc:PostalZone>0030</cbc:PostalZone>
+                  <cbc:CountrySubentityCode listName="nuts">NO081</cbc:CountrySubentityCode>
+                  <cac:Country>
+                    <cbc:IdentificationCode listName="country">NOR</cbc:IdentificationCode>
+                  </cac:Country>
+                </cac:PostalAddress>
+                <cac:PartyLegalEntity>
+                  <cbc:CompanyID schemeID="002">972417793</cbc:CompanyID>
+                </cac:PartyLegalEntity>
+                <cac:Contact>
+                  <cbc:Name>Thea Ringstad</cbc:Name>
+                  <cbc:Telephone>+47 22249090</cbc:Telephone>
+                  <cbc:ElectronicMail>postmottak@bfd.dep.no</cbc:ElectronicMail>
+                </cac:Contact>
+              </efac:Company>
+            </efac:Organization>
+            <efac:Organization>
+              <efac:Company>
+                <cbc:WebsiteURI>http://www.domstol.no/otir</cbc:WebsiteURI>
+                <cac:PartyIdentification>
+                  <cbc:ID schemeName="organization">ORG-0002</cbc:ID>
+                </cac:PartyIdentification>
+                <cac:PartyName>
+                  <cbc:Name languageID="NOR">Oslo Tingrett</cbc:Name>
+                </cac:PartyName>
+                <cac:PartyName>
+                  <cbc:Name languageID="ENG">Oslo Tingrett</cbc:Name>
+                </cac:PartyName>
+                <cac:PostalAddress>
+                  <cbc:StreetName>Postboks 2106 Vika</cbc:StreetName>
+                  <cbc:CityName>Oslo</cbc:CityName>
+                  <cbc:PostalZone>0125</cbc:PostalZone>
+                  <cbc:CountrySubentityCode listName="nuts">NO081</cbc:CountrySubentityCode>
+                  <cac:Country>
+                    <cbc:IdentificationCode listName="country">NOR</cbc:IdentificationCode>
+                  </cac:Country>
+                </cac:PostalAddress>
+                <cac:PartyLegalEntity>
+                  <cbc:CompanyID schemeID="002">926725939</cbc:CompanyID>
+                </cac:PartyLegalEntity>
+                <cac:Contact>
+                  <cbc:Telephone>+47 22035200</cbc:Telephone>
+                  <cbc:ElectronicMail>oslo.tingrett@domstol.no</cbc:ElectronicMail>
+                </cac:Contact>
+              </efac:Company>
+            </efac:Organization>
+            <efac:Organization>
+              <efac:Company>
+                <efbc:CompanySizeCode listName="economic-operator-size">large</efbc:CompanySizeCode>
+                <cac:PartyIdentification>
+                  <cbc:ID schemeName="organization">ORG-0003</cbc:ID>
+                </cac:PartyIdentification>
+                <cac:PartyName>
+                  <cbc:Name languageID="NOR">OsloMet- storbyuniversitetet NIBR</cbc:Name>
+                </cac:PartyName>
+                <cac:PartyName>
+                  <cbc:Name languageID="ENG">OsloMet- storbyuniversitetet NIBR</cbc:Name>
+                </cac:PartyName>
+                <cac:PostalAddress>
+                  <cbc:StreetName>Postboks 4 - St. Olavs plass</cbc:StreetName>
+                  <cbc:CityName>Oslo</cbc:CityName>
+                  <cbc:PostalZone>0130</cbc:PostalZone>
+                  <cbc:CountrySubentityCode listName="nuts">NO081</cbc:CountrySubentityCode>
+                  <cac:Country>
+                    <cbc:IdentificationCode listName="country">NOR</cbc:IdentificationCode>
+                  </cac:Country>
+                </cac:PostalAddress>
+                <cac:PartyLegalEntity>
+                  <cbc:CompanyID schemeID="002">997058925</cbc:CompanyID>
+                </cac:PartyLegalEntity>
+                <cac:Contact>
+                  <cbc:Telephone>+47 41402068</cbc:Telephone>
+                  <cbc:ElectronicMail>chripal@oslomet.no</cbc:ElectronicMail>
+                </cac:Contact>
+              </efac:Company>
+            </efac:Organization>
+          </efac:Organizations>
+        </efext:EformsExtension>
+      </ext:ExtensionContent>
+    </ext:UBLExtension>
+  </ext:UBLExtensions>
+  <cbc:UBLVersionID>2.3</cbc:UBLVersionID>
+  <cbc:CustomizationID>eforms-sdk-1.14#extended#urn:fdc:anskaffelser.no:2023:eforms:eu</cbc:CustomizationID>
+  <cbc:ID schemeName="notice-id">435b00a1-6361-4090-ac68-204b5851f143</cbc:ID>
+  <cbc:ContractFolderID>7066a06e-7cb3-4c36-84bb-c4d6bd5fe891</cbc:ContractFolderID>
+  <cbc:IssueDate>2026-11-23+00:00</cbc:IssueDate>
+  <cbc:IssueTime>12:42:39+00:00</cbc:IssueTime>
+  <cbc:VersionID>01</cbc:VersionID>
+  <cbc:RegulatoryDomain>32014L0024</cbc:RegulatoryDomain>
+  <cbc:NoticeTypeCode listName="result">can-standard</cbc:NoticeTypeCode>
+  <cbc:NoticeLanguageCode>NOR</cbc:NoticeLanguageCode>
+  <cac:AdditionalNoticeLanguage>
+    <cbc:ID>ENG</cbc:ID>
+  </cac:AdditionalNoticeLanguage>
+  <cac:ContractingParty>
+    <cbc:BuyerProfileURI>https://eu.eu-supply.com/ctm/company/companyinformation/index/333461</cbc:BuyerProfileURI>
+    <cac:ContractingPartyType>
+      <cbc:PartyTypeCode listName="buyer-legal-type">cga</cbc:PartyTypeCode>
+    </cac:ContractingPartyType>
+    <cac:ContractingActivity>
+      <cbc:ActivityTypeCode listName="authority-activity">gen-pub</cbc:ActivityTypeCode>
+    </cac:ContractingActivity>
+    <cac:Party>
+      <cac:PartyIdentification>
+        <cbc:ID schemeName="organization">ORG-0001</cbc:ID>
+      </cac:PartyIdentification>
+    </cac:Party>
+  </cac:ContractingParty>
+  <cac:TenderingProcess>
+    <cbc:Description languageID="NOR">Anskaffelsen gjennomføres i henhold til lov 17. juni 2016 nr. 73 om offentlige anskaffelser (anskaffelsesloven) og forskrift 12. august 2016 nr. 974 om offentlige anskaffelser (anskaffelsesforskriften), del I og del III etter anskaffelsesprosedyren åpen anbudskonkurranse, jf. anskaffelsesforskriften § 13-1(1).
+
+Anskaffelsen er kunngjort på Doffin og TED.
+
+I denne konkurransen er det ikke tillatt å gjennomføre forhandlinger. Det er følgelig ikke anledning til å endre tilbudet etter tilbudsfristens utløp.</cbc:Description>
+    <cbc:Description languageID="ENG">The procurement will be made in accordance with the Act from 17 June 2016 no. 73 on public procurements (the Procurement Act) and regulations 12 August 2016 no. 974 on public procurements (the procurement regulations), part I and part III after the procurement procedure open tender contest, c.f. the procurement regulations § 13-1(1).
+
+The procurement is published in Doffin and TED.
+
+Negotiations are not allowed in this competition. Tenders cannot, therefore, be changed after the tender deadline has expired.</cbc:Description>
+    <cbc:ProcedureCode listName="procurement-procedure-type">open</cbc:ProcedureCode>
+    <cac:NoticeDocumentReference>
+      <cbc:ID schemeName="notice-id-ref">94ddac05-c54b-4ee8-b5b4-fd2e673b451d-01</cbc:ID>
+    </cac:NoticeDocumentReference>
+    <cac:ProcessJustification>
+      <cbc:ProcessReasonCode listName="accelerated-procedure">false</cbc:ProcessReasonCode>
+    </cac:ProcessJustification>
+  </cac:TenderingProcess>
+  <cac:ProcurementProject>
+    <cbc:ID>26/2825</cbc:ID>
+    <cbc:Name languageID="NOR">Utredning om omfang og utvikling av barne- og ungdomskriminalitet</cbc:Name>
+    <cbc:Name languageID="ENG">Review of the extent and development of child and youth crimes.</cbc:Name>
+    <cbc:Description languageID="NOR">Dagens offisielle kriminalitetsstatistikk baserer seg utelukkende på politiets registre, og har flere metodiske begrensninger. Andre datakilder basert på survey-data danner ikke nødvendigvis samme bilde av omfanget og utviklingen i barne- og ungdomskriminaliteten som den offisielle kriminalitetsstatistikken. Det er usikkerhet knyttet til hvordan utviklingen i barne- og ungdomskriminalitet faktisk er målt og hvordan statistikken skal forstås. For å forstå omfang, utviklingstrekk og mulige forklaringer på utviklingen i barne- og ungdomskriminaliteten, er det behov for et solid datagrunnlag.
+
+Formålet med oppdraget er å fremskaffe et uavhengig, forskningsbasert og helhetlig kunnskapsgrunnlag om utviklingen i barne- og ungdomskriminalitet i Norge. Det inkluderer å:
+1. Kartlegge eksisterende datakilder
+2. Belyse hvordan utviklingen i barne- og ungdomskriminalitet kan sammenstilles og forstås over tid  
+3. Anbefale tiltak for varig høy kvalitet på kunnskapsgrunnlaget
+
+Kunnskapen vil danne et viktig grunnlag for at myndigheter og andre aktører som arbeider med forebygging av barne- og ungdomskriminalitet skal kunne sette i verk mest mulig treffsikker innsats.
+
+Endelig leveringsfrist for avtalen er 30. november 2027. Oppdraget har en verdi på NOK 1,8 mill. ekskl. mva.  
+
+For nærmere beskrivelse av leveransen, se bilag 1 til avtalen.</cbc:Description>
+    <cbc:Description languageID="ENG">Today's official crime statistics are based solely on the police registers and have several methodic limitations. Other data sources based on survey data do not necessarily form the same picture of the extent and development of child and youth crime as the official crime statistics. There is uncertainty as to how the developments in child and youth crime are actually measured and how the statistics are understood. In order to understand the extent, development and possible explanations of the development in the child and youth crime, a solid data basis is needed.
+
+The aim of the assignment is to procure an independent, research-based and comprehensive knowledge basis for the development of child and youth crime in Norway. It includes:
+1. Map existing data sources
+2. Highlight how developments in child and youth crime can be collated and understood over time  
+3. Recommend measures for long-term high quality of the knowledge basis
+
+The knowledge will form an important basis for authorities and other actors who work with the prevention of child and youth crimes being able to implement as much effort as possible.
+
+The final delivery deadline for the contract is 30 November 2027. The assignment has a value of NOK 1.8 million excluding VAT.  
+
+See annex 1 of the contract for further details on the delivery.</cbc:Description>
+    <cbc:ProcurementTypeCode listName="contract-nature">services</cbc:ProcurementTypeCode>
+    <cac:RequestedTenderTotal>
+      <cbc:EstimatedOverallContractAmount currencyID="NOK">1800000</cbc:EstimatedOverallContractAmount>
+    </cac:RequestedTenderTotal>
+    <cac:MainCommodityClassification>
+      <cbc:ItemClassificationCode listName="cpv">73000000</cbc:ItemClassificationCode>
+    </cac:MainCommodityClassification>
+    <cac:AdditionalCommodityClassification>
+      <cbc:ItemClassificationCode listName="cpv">73200000</cbc:ItemClassificationCode>
+    </cac:AdditionalCommodityClassification>
+    <cac:AdditionalCommodityClassification>
+      <cbc:ItemClassificationCode listName="cpv">73210000</cbc:ItemClassificationCode>
+    </cac:AdditionalCommodityClassification>
+    <cac:RealizedLocation>
+      <cac:Address>
+        <cbc:Region>anyw</cbc:Region>
+      </cac:Address>
+    </cac:RealizedLocation>
+  </cac:ProcurementProject>
+  <cac:ProcurementProjectLot>
+    <cbc:ID schemeName="Lot">LOT-0000</cbc:ID>
+    <cac:TenderingTerms>
+      <cbc:FundingProgramCode listName="eu-funded">no-eu-funds</cbc:FundingProgramCode>
+      <cac:AwardingTerms>
+        <cac:AwardingCriterion>
+          <cac:SubordinateAwardingCriterion>
+            <ext:UBLExtensions>
+              <ext:UBLExtension>
+                <ext:ExtensionContent>
+                  <efext:EformsExtension>
+                    <efac:AwardCriterionParameter>
+                      <efbc:ParameterCode listName="number-weight">per-exa</efbc:ParameterCode>
+                      <efbc:ParameterNumeric>30</efbc:ParameterNumeric>
+                    </efac:AwardCriterionParameter>
+                  </efext:EformsExtension>
+                </ext:ExtensionContent>
+              </ext:UBLExtension>
+            </ext:UBLExtensions>
+            <cbc:AwardingCriterionTypeCode listName="award-criterion-type">quality</cbc:AwardingCriterionTypeCode>
+            <cbc:Name languageID="NOR">Kompetanse hos tilbudt personell</cbc:Name>
+            <cbc:Name languageID="ENG">Competence of offered personnel</cbc:Name>
+            <cbc:Description languageID="NOR">Utfylt bilag 4 til avtalen, Administrative bestemmelser.
+
+Inntil 5 CVer for tilbudt personell med en beskrivelse av de tre mest relevante oppdragene for hver av de tilbudte ressursene samt hvilken rolle vedkommende hadde i oppdragene. CVene bør ikke overskride 2 A4 sider pr. tilbudte ressurs.</cbc:Description>
+            <cbc:Description languageID="ENG">Completed Annex 4 to the contract, Administrative provisions.
+
+Up to 5 CVs for offered personnel with a description of the three most relevant assignments for each of the offered resources as well as the function the tenderer had in the assignments. CVs should not exceed 2 A4 pages per offered resource.</cbc:Description>
+          </cac:SubordinateAwardingCriterion>
+          <cac:SubordinateAwardingCriterion>
+            <ext:UBLExtensions>
+              <ext:UBLExtension>
+                <ext:ExtensionContent>
+                  <efext:EformsExtension>
+                    <efac:AwardCriterionParameter>
+                      <efbc:ParameterCode listName="number-weight">per-exa</efbc:ParameterCode>
+                      <efbc:ParameterNumeric>70</efbc:ParameterNumeric>
+                    </efac:AwardCriterionParameter>
+                  </efext:EformsExtension>
+                </ext:ExtensionContent>
+              </ext:UBLExtension>
+            </ext:UBLExtensions>
+            <cbc:AwardingCriterionTypeCode listName="award-criterion-type">quality</cbc:AwardingCriterionTypeCode>
+            <cbc:Name languageID="NOR">Oppdragsforståelse</cbc:Name>
+            <cbc:Name languageID="ENG">Assignment comprehension</cbc:Name>
+            <cbc:Description languageID="NOR">Utfylt bilag 2 til avtalen, Konsulentens spesifikasjon av oppdraget. 
+
+Utfylt bilag 3 til avtalen, Prosjekt- og fremdriftsplan.</cbc:Description>
+            <cbc:Description languageID="ENG">Completed Annex 2 of the contract, the Consultant ́s specification of the assignment. 
+
+Completed annex 3 to the contract, Project and progress plan.</cbc:Description>
+          </cac:SubordinateAwardingCriterion>
+        </cac:AwardingCriterion>
+      </cac:AwardingTerms>
+      <cac:AppealTerms>
+        <cac:PresentationPeriod>
+          <cbc:Description languageID="NOR">10 kalenderdager, regnet fra og med første kalenderdag etter dato for utsendelse av meddelelsesbrev.</cbc:Description>
+          <cbc:Description languageID="ENG">10 calendar days calculated from the first calendar day after the date the notification letter is sent out.</cbc:Description>
+        </cac:PresentationPeriod>
+        <cac:AppealInformationParty>
+          <cac:PartyIdentification>
+            <cbc:ID schemeName="organization">ORG-0002</cbc:ID>
+          </cac:PartyIdentification>
+        </cac:AppealInformationParty>
+        <cac:AppealReceiverParty>
+          <cac:PartyIdentification>
+            <cbc:ID schemeName="organization">ORG-0002</cbc:ID>
+          </cac:PartyIdentification>
+        </cac:AppealReceiverParty>
+      </cac:AppealTerms>
+    </cac:TenderingTerms>
+    <cac:TenderingProcess>
+      <cbc:GovernmentAgreementConstraintIndicator>true</cbc:GovernmentAgreementConstraintIndicator>
+      <cac:AuctionTerms>
+        <cbc:AuctionConstraintIndicator>false</cbc:AuctionConstraintIndicator>
+      </cac:AuctionTerms>
+      <cac:ContractingSystem>
+        <cbc:ContractingSystemTypeCode listName="dps-usage">none</cbc:ContractingSystemTypeCode>
+      </cac:ContractingSystem>
+      <cac:ContractingSystem>
+        <cbc:ContractingSystemTypeCode listName="framework-agreement">none</cbc:ContractingSystemTypeCode>
+      </cac:ContractingSystem>
+    </cac:TenderingProcess>
+    <cac:ProcurementProject>
+      <cbc:ID>26/2825</cbc:ID>
+      <cbc:Name languageID="NOR">Utredning om omfang og utvikling av barne- og ungdomskriminalitet</cbc:Name>
+      <cbc:Name languageID="ENG">Review of the extent and development of child and youth crimes.</cbc:Name>
+      <cbc:Description languageID="NOR">Dagens offisielle kriminalitetsstatistikk baserer seg utelukkende på politiets registre, og har flere metodiske begrensninger. Andre datakilder basert på survey-data danner ikke nødvendigvis samme bilde av omfanget og utviklingen i barne- og ungdomskriminaliteten som den offisielle kriminalitetsstatistikken. Det er usikkerhet knyttet til hvordan utviklingen i barne- og ungdomskriminalitet faktisk er målt og hvordan statistikken skal forstås. For å forstå omfang, utviklingstrekk og mulige forklaringer på utviklingen i barne- og ungdomskriminaliteten, er det behov for et solid datagrunnlag.
+
+Formålet med oppdraget er å fremskaffe et uavhengig, forskningsbasert og helhetlig kunnskapsgrunnlag om utviklingen i barne- og ungdomskriminalitet i Norge. Det inkluderer å:
+1. Kartlegge eksisterende datakilder
+2. Belyse hvordan utviklingen i barne- og ungdomskriminalitet kan sammenstilles og forstås over tid  
+3. Anbefale tiltak for varig høy kvalitet på kunnskapsgrunnlaget
+
+Kunnskapen vil danne et viktig grunnlag for at myndigheter og andre aktører som arbeider med forebygging av barne- og ungdomskriminalitet skal kunne sette i verk mest mulig treffsikker innsats.
+
+Endelig leveringsfrist for avtalen er 30. november 2027. Oppdraget har en verdi på NOK 1,8 mill. ekskl. mva.  
+
+For nærmere beskrivelse av leveransen, se bilag 1 til avtalen.</cbc:Description>
+      <cbc:Description languageID="ENG">Today's official crime statistics are based solely on the police registers and have several methodic limitations. Other data sources based on survey data do not necessarily form the same picture of the extent and development of child and youth crime as the official crime statistics. There is uncertainty as to how the developments in child and youth crime are actually measured and how the statistics are understood. In order to understand the extent, development and possible explanations of the development in the child and youth crime, a solid data basis is needed.
+
+The aim of the assignment is to procure an independent, research-based and comprehensive knowledge basis for the development of child and youth crime in Norway. It includes:
+1. Map existing data sources
+2. Highlight how developments in child and youth crime can be collated and understood over time  
+3. Recommend measures for long-term high quality of the knowledge basis
+
+The knowledge will form an important basis for authorities and other actors who work with the prevention of child and youth crimes being able to implement as much effort as possible.
+
+The final delivery deadline for the contract is 30 November 2027. The assignment has a value of NOK 1.8 million excluding VAT.  
+
+See annex 1 of the contract for further details on the delivery.</cbc:Description>
+      <cbc:ProcurementTypeCode listName="contract-nature">services</cbc:ProcurementTypeCode>
+      <cac:RequestedTenderTotal>
+        <cbc:EstimatedOverallContractAmount currencyID="NOK">1800000</cbc:EstimatedOverallContractAmount>
+      </cac:RequestedTenderTotal>
+      <cac:MainCommodityClassification>
+        <cbc:ItemClassificationCode listName="cpv">73000000</cbc:ItemClassificationCode>
+      </cac:MainCommodityClassification>
+      <cac:AdditionalCommodityClassification>
+        <cbc:ItemClassificationCode listName="cpv">73200000</cbc:ItemClassificationCode>
+      </cac:AdditionalCommodityClassification>
+      <cac:AdditionalCommodityClassification>
+        <cbc:ItemClassificationCode listName="cpv">73210000</cbc:ItemClassificationCode>
+      </cac:AdditionalCommodityClassification>
+      <cac:RealizedLocation>
+        <cac:Address>
+          <cbc:Region>anyw</cbc:Region>
+        </cac:Address>
+      </cac:RealizedLocation>
+      <cac:PlannedPeriod>
+        <cbc:DurationMeasure unitCode="MONTH">13</cbc:DurationMeasure>
+      </cac:PlannedPeriod>
+    </cac:ProcurementProject>
+  </cac:ProcurementProjectLot>
+  <cac:TenderResult>
+    <cbc:AwardDate>2000-01-01Z</cbc:AwardDate>
+  </cac:TenderResult>
+</ContractAwardNotice>

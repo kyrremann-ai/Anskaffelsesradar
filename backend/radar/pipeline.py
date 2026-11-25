@@ -198,6 +198,8 @@ def run(con, demo: bool | None = None) -> None:
             if settings.doffin:
                 _source("Doffin", lambda: db.upsert_contracts(
                     con, doffin.refresh(con, settings.doffin_api_key, settings.ted_from, log=_log)), doffin_src, "nye siden sist")
+                _source("Doffin XML", lambda: doffin.enrich(con, settings.doffin_api_key, settings.data_dir / "cache" / "doffin_xml",
+                                                          settings.doffin_xml_per_run, log=_log), doffin_src, "beriket")
             sources = doffin_src | live_sources(con)
             # Prosedyre-ID og konkurransekunngjøringer gir forløp og frister; feil her stopper ikke resten
             _source("TED forløp og frister", lambda: (ted.backfill_procedures(con, log=_log),
