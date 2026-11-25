@@ -37,7 +37,22 @@ def test_checks(con):
     keys = {k: [c["key"] for c in r["checks"]] for k, r in res.items()}
     assert keys["333333333"] == ["uten_kontrakt_over_terskel"]  # 1,4 mill. på 12 mnd, ingen kontrakt
     assert keys["111111111"] == ["over_kontraktsverdi"]  # 1,6 mill. mot 1 mill. kunngjort
-    assert keys["444444444"] == ["uten_kontrakt_over_100k"]
+    assert keys["444444444"] == ["uten_kontrakt_over_lovgrense"]
     assert keys["555555555"] == []
     assert res["111111111"]["contracts"][0]["id"] == "1-2025"
     assert res["111111111"]["max_12m"] == 1_600_000
+
+
+def test_lovgrense_etter_1_juli_2026(con, tmp_path):
+    """Fra 1.7.2026 gjelder anskaffelsesloven fra 500 000 kr (§ 2); før det fra 100 000 kr."""
+    f = tmp_path / f"faktura_{B}_2026.csv"
+    f.write_text("Leverandør orgnr;Leverandørnavn;Fakturadato;Beløp ekskl. mva;Konto;Fakturanummer\n"
+                 "666666666;Fiktiv Etter AS;15.08.2026;300 000,00;6700;1\n"   # under ny grense: ingen merknad
+                 "777777777;Fiktiv Stor AS;15.08.2026;600 000,00;6700;2\n"    # over ny grense
+                 "888888888;Fiktiv Skille AS;15.05.2026;90 000,00;6700;3\n"   # før: 90k, etter: 400k,
+                 "888888888;Fiktiv Skille AS;15.07.2026;400 000,00;6700;4\n", encoding="utf-8")  # ingen av periodene over
+    faktura.import_file(con, f, log=lambda *_: None)
+    keys = {r["orgnr"]: [c["key"] for c in r["checks"]] for r in analyse(con)["rows"]}
+    assert keys["666666666"] == []
+    assert keys["777777777"] == ["uten_kontrakt_over_lovgrense"]
+    assert keys["888888888"] == []

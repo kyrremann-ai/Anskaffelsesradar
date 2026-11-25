@@ -12,7 +12,7 @@ export default function Invoices() {
   return (
     <div>
       <PageHead title="Fakturakontroll"
-        desc="Kjøp fra kundens egne fakturaer, summert per leverandør og sammenlignet med kontraktene radaren kjenner fra TED og Doffin. Her blir direkte kjøp og kjøp under terskel synlige." />
+        desc="Kjøp fra kundens egne fakturaer, summert per leverandør og sammenlignet med kontraktene radaren kjenner fra TED og Doffin. Her blir direkte kjøp og kjøp under terskel synlige. Kjøp uten kunngjort kontrakt vurderes mot anskaffelseslovens nedre grense: 100 000 kr før 1.7.2026 og 500 000 kr fra 1.7.2026 (ekskl. mva, summert over 12 måneder)." />
       {!data.rows.length ? (
         <Empty>Ingen fakturadata lastet inn. Legg en CSV- eller XLSX-fil med leverandørens orgnr, beløp ekskl. mva, fakturadato og konto
           i importmappen (faktura_&lt;orgnr&gt;.csv). Dataene blir i kundens database og sendes aldri til en språkmodell.</Empty>
