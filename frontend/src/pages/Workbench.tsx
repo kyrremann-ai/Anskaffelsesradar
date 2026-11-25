@@ -11,9 +11,11 @@ const PAGE = 40;
 
 /** Arbeidsflate: prioritert kø til venstre, saksmappe til høyre. Erstatter Risikoregister + Saksliste. */
 export default function Workbench() {
-  const { param: buyers } = useScope();
+  const { param: scopeBuyers } = useScope();
   const [sp, setSp] = useSearchParams();
   const get = (k: string) => sp.get(k) ?? "";
+  // ?buyer= er et midlertidig filter på én oppdragsgiver; «Mine enheter» blir stående som før
+  const buyers = get("buyer") || scopeBuyers;
   const set = (k: string, v: string) => {
     const n = new URLSearchParams(sp);
     if (v) n.set(k, v); else n.delete(k);
@@ -69,6 +71,7 @@ export default function Workbench() {
           items={["Åpen", "Begrenset", "Forhandling", "Direkte tildeling", "Annet"].map((m) => ({ v: m, l: m }))} />
         <Select label="Sak" value={get("sak")} onChange={(v) => set("sak", v)} placeholder="Med og uten sak"
           items={[{ v: "uten", l: "Uten sak" }, { v: "med", l: "Med sak" }, { v: "apne", l: "Åpne saker" }, ...(meta?.case_statuses ?? []).map((s) => ({ v: s, l: `Sak: ${s}` }))]} />
+        {get("buyer") && <Button variant="outline" onClick={() => set("buyer", "")}>Oppdragsgiver {get("buyer")} <Icon name="close" className="h-3.5 w-3.5" /></Button>}
         {get("supplier") && <Button variant="outline" onClick={() => set("supplier", "")}>Leverandør {get("supplier")} <Icon name="close" className="h-3.5 w-3.5" /></Button>}
       </div>
 

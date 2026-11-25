@@ -137,7 +137,7 @@ export function SupplierPage() {
             <ul className="space-y-1.5 text-sm">
               {d.links.map((l, i) => (
                 <li key={i}>
-                  <Link to={l.is_buyer ? `/arbeid` : `/leverandorer/${l.orgnr}`} className={cx("font-medium hover:underline", l.is_buyer && "text-hi")}>{l.name}</Link>
+                  <Link to={l.is_buyer ? `/arbeid?buyer=${encodeURIComponent(l.orgnr)}&supplier=${encodeURIComponent(orgnr)}` : `/leverandorer/${l.orgnr}`} className={cx("font-medium hover:underline", l.is_buyer && "text-hi")}>{l.name}</Link>
                   {l.is_buyer && <span className="ml-1 rounded bg-hi-soft px-1 text-xs text-hi">oppdragsgiver</span>}
                   <div className="text-xs text-muted">via {l.via} ({l.rolle})</div>
                 </li>

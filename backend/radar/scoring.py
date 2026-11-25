@@ -162,15 +162,21 @@ def contracts_frame(con, extra: list[dict] | None = None) -> pd.DataFrame:
     df["winner"] = df.winner_ids.map(lambda w: w[0] if w else None)
     df = df.sort_values(["pub_date", "id"]).reset_index(drop=True)
     award = df.notice_type.eq("tildeling") & df.winner.notna()
-    # Tidligere tildelinger for samme oppdragsgiver + leverandør (før denne kontrakten)
-    df["repeat_pair_count"] = df[award].groupby(["buyer_id", "winner"]).cumcount().reindex(df.index)
-    df["prev_contract"] = (df.repeat_pair_count > 0).astype(float).where(award)
-    # Vinners andel av verdien (eller antall) i CPV-divisjonen
     df["cpv2"] = df.cpv.fillna("").str[:2]
     val = df.award_value.fillna(df.est_value).fillna(1.0).where(award)
-    grp = val.groupby([df.cpv2, df.winner]).transform("sum")
-    tot = val.groupby(df.cpv2).transform("sum")
-    df["winner_market_share_pct"] = (grp / tot * 100).where(award)
+    # Én rad per vinner, så alle leverandørene i en parallell rammeavtale eller delkontrakt telles,
+    # ikke bare den første. Verdien deles likt på vinnerne.
+    ex = df.loc[award, ["buyer_id", "cpv2", "winner_ids"]].assign(val=val[award] / df.loc[award, "winner_ids"].map(len))
+    ex = ex.explode("winner_ids").rename(columns={"winner_ids": "w"})
+    # Tidligere tildelinger for samme oppdragsgiver + leverandør (før denne kontrakten); høyeste blant vinnerne
+    ex["rep"] = ex.groupby(["buyer_id", "w"]).cumcount()
+    df["repeat_pair_count"] = ex.groupby(level=0).rep.max().reindex(df.index)
+    df["prev_contract"] = (df.repeat_pair_count > 0).astype(float).where(award)
+    # Vinners andel av verdien (eller antall) i CPV-divisjonen; høyeste andel blant vinnerne
+    ex["share"] = ex.groupby(["cpv2", "w"]).val.transform("sum") / ex.groupby("cpv2").val.transform("sum") * 100
+    df["winner_market_share_pct"] = ex.groupby(level=0).share.max().reindex(df.index).where(award)
+    # Laveste tilbudstall over delkontraktene (TED/eForms), når kunngjøringen har flere
+    df["min_bidders"] = df.raw.map(lambda s: ((s if isinstance(s, dict) else json.loads(s) if isinstance(s, str) and s else None) or {}).get("min_bidders"))
     # Verdier som feilet verdikontrollen brukes ikke til overskridelse
     ok = df.est_value.gt(0) & df.award_value.notna() & df.get("value_note", pd.Series(None, index=df.index)).isna()
     df["award_over_estimate_pct"] = ((df.award_value / df.est_value - 1) * 100).where(ok)
@@ -228,6 +234,9 @@ def fixed_checks(r) -> list[dict]:
     value = r.award_value if pd.notna(r.award_value) else r.est_value
     if r.notice_type == "tildeling" and r.num_bidders == 1:
         out.append({"key": "ett_tilbud", "label": "Ett registrert tilbud", "why": "Kunngjøringen oppgir ett mottatt tilbud"})
+    elif r.notice_type == "tildeling" and getattr(r, "min_bidders", None) == 1:
+        out.append({"key": "ett_tilbud_delkontrakt", "label": "Ett registrert tilbud på minst én delkontrakt",
+                    "why": f"Kunngjøringen oppgir ett mottatt tilbud på minst én delkontrakt (høyest {r.num_bidders:.0f})"})
     if r.notice_type == "intensjon":
         out.append({"key": "intensjon", "label": "Intensjonskunngjøring om direkte tildeling",
                     "why": "Planlagt kontrakt uten konkurranse" + (f", oppgitt verdi {value:,.0f} kr".replace(",", " ") if pd.notna(value) else ", verdi ikke oppgitt")})

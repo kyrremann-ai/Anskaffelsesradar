@@ -78,6 +78,7 @@ export default function Method() {
         <Card title="Faste kontrollpunkter" desc="Slår ut uansett fordeling, og vises ved siden av prioriteten (rød rute)">
           <ul className="list-disc space-y-1.5 pl-5 text-sm">
             <li><b>Ett registrert tilbud:</b> kunngjøringen oppgir ett mottatt tilbud.</li>
+            <li><b>Ett registrert tilbud på minst én delkontrakt:</b> kunngjøringen har flere delkontrakter, og minst én av dem oppgir ett mottatt tilbud.</li>
             <li><b>Direkte tildeling over nasjonal terskelverdi:</b> prosedyren er direkte tildeling og verdien er minst 1,3 mill. kr (FOA § 5-1). Lovlig ved gyldig unntak, som må sjekkes i begrunnelsen.</li>
             <li><b>Intensjonskunngjøring om direkte tildeling:</b> oppdragsgiver har varslet en kontrakt uten konkurranse.</li>
             <li><b>Frist under lovens minstefrist:</b> under 30 dager fra konkurransekunngjøringen ble sendt til TED til tilbudsfristen eller fristen for forespørsel
