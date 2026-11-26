@@ -1,7 +1,7 @@
 """SSB KOSTRA-grupper: kommuner gruppert etter folkemengde og økonomiske rammebetingelser.
 
 Brukes til å sammenligne en kommune med lignende kommuner i stedet for med hele landet.
-Grupperingen for 2024 ligger i data/kostra_grupper_2024.csv (fra SSB, 357 kommuner, gruppe 1–17).
+Grupperingen for 2024 ligger i referansedata/kostra_grupper_2024.csv (fra SSB, 357 kommuner, gruppe 1–17).
 En nyere fil kan legges i data/import/ som kostra*.csv (kommunenr;kommune;kostragruppe) eller kostra*.xlsx
 (kolonnene komnr, komnavn, kostragr). Nyeste årstall i filnavnet vinner.
 """
@@ -12,7 +12,7 @@ import io
 import re
 from pathlib import Path
 
-BUNDLED = Path(__file__).parent / "data" / "kostra_grupper_2024.csv"
+BUNDLED = Path(__file__).parent / "referansedata" / "kostra_grupper_2024.csv"
 
 
 def _rows_xlsx(path: Path) -> list[list]:
@@ -54,4 +54,6 @@ def load(import_dir: Path | None = None) -> tuple[dict[str, int], str]:
             continue
         if len(m) >= 300:
             return m, f.name
+    if not BUNDLED.exists():  # uten gruppering faller sammenligningen tilbake på oppdragsgivertype
+        return {}, ""
     return parse(_rows_csv(BUNDLED)), BUNDLED.name
