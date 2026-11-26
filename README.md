@@ -50,6 +50,10 @@ cd frontend && npm install && npm run dev # http://localhost:5173 (proxy til API
 
 Ekte data: `RADAR_MODE=live python -m radar.pipeline`. Første kjøring henter rundt 7 000 kunngjøringer fra TED og 5 500 orgnr fra Brreg, og tar 20–40 minutter. Etter det hentes bare nye.
 
+## Offentlig demo på vikingsea.no/radar/
+
+`deploy/build_offentlig.sh ut-offentlig/` bygger en versjon uten innlogging med fiktive demodata (`radar.synthetic`) i en egen, midlertidig database, så live-dataene aldri blandes inn. Skriptet stopper hvis eksporten ikke er i demomodus. Saker lagres bare i nettleseren. Kopier `ut-offentlig/` til `radar/` i vikingsea.no-mappen og publiser den på Netlify.
+
 ## Demo på radar.vikingsea.no (Cloudflare Pages + Access)
 
 Klienten bygd statisk (VITE_STATIC=1) med dataene som JSON-filer, på eget domene. Bare inviterte e-poster kommer inn (engangskode fra Cloudflare Access, gratis opptil 50 brukere). Saker lagres i Cloudflare D1 via Pages Functions (`deploy/cloudflare/functions`), og loggen viser Access-e-posten til den som endret.
