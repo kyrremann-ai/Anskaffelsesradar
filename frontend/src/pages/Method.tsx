@@ -94,7 +94,9 @@ export default function Method() {
             <li><b>Register-tillegg</b>: {w?.brreg_per_weight ?? 8} poeng per vektpoeng i flaggene fra Brreg og tilleggskildene, maks {w?.brreg_cap ?? 20}.</li>
             <li>Ved lik poengsum kommer større kontrakter først.</li>
             <li><b>Sammenligningsgruppe:</b> samme poengsum rangeres også innen oppdragsgivertype × sektor (for eksempel «Helseforetak × Helse»).
-              Oppdragsgivertypen tas fra organisasjonsformen i Brreg. Grupper med under 30 kontrakter bruker bare oppdragsgivertypen.
+              Oppdragsgivertypen tas fra organisasjonsformen i Brreg. Kommuner sammenlignes først med kommuner i samme KOSTRA-gruppe
+              (SSBs gruppering etter folkemengde og økonomiske rammebetingelser, 2024): KOSTRA-gruppe × sektor, deretter hele KOSTRA-gruppen.
+              Grupper med under 30 kontrakter faller tilbake på oppdragsgivertype × sektor, og så bare oppdragsgivertypen.
               Velg «Innen sammenligningsgruppe» i arbeidsflaten. Hvert flagg viser hvor mange poeng det bidrar med.</li>
           </ol>
           <p className="mt-3 rounded bg-sunk p-2 font-mono text-xs">prioritet = (CRI + register) / 1,2</p>

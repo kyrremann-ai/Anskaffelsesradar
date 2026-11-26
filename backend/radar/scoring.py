@@ -23,7 +23,8 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from . import dismissals, klagerisiko
+from . import dismissals, klagerisiko, kostra
+from .config import settings
 from .db import set_meta, tx
 from .enrich import ExtraIndex
 from .ingest.brreg import BrregIndex
@@ -258,10 +259,17 @@ def buyer_type(orgform: str | None, name: str | None) -> str:
 
 
 def peer_rank(df: pd.DataFrame, key: pd.Series, award: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """Persentil innen oppdragsgivertype × sektor, og gruppen som ble brukt."""
-    group = df.buyer_type + " × " + df.sector.fillna("Annet")
-    n = group[award].value_counts()
-    group = group.where(group.map(n).fillna(0) >= PEER_MIN, df.buyer_type + " (alle sektorer)")
+    """Persentil innen sammenligningsgruppen, og gruppen som ble brukt. Første gruppe med minst PEER_MIN kontrakter:
+    kommuner i samme KOSTRA-gruppe × sektor, samme KOSTRA-gruppe, oppdragsgivertype × sektor, oppdragsgivertype."""
+    sector = df.sector.fillna("Annet")
+    kg = df.get("kostra_gruppe", pd.Series(None, index=df.index))
+    kname = "Kommune i KOSTRA-gruppe " + kg.map(lambda g: f"{int(g)}" if pd.notna(g) else "")
+    chain = [(kname + " × " + sector).where(kg.notna()), (kname + " (alle sektorer)").where(kg.notna()),
+             df.buyer_type + " × " + sector]
+    group = df.buyer_type + " (alle sektorer)"
+    for cand in reversed(chain):
+        n = cand[award].value_counts()
+        group = cand.where(cand.notna() & (cand.map(n).fillna(0) >= PEER_MIN), group)
     pct = key[award].groupby(group[award]).rank(pct=True, method="average") * 100
     return pct.reindex(df.index), group
 
@@ -313,6 +321,10 @@ def score_all(con, log=print) -> int:
     df["tier"] = np.select([~award, df.percentile >= 95, df.percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
     # Samme rangering innen sammenligningsgruppen, så sektorer som kjøper ulikt ikke dominerer topplisten
     df["buyer_type"] = [buyer_type((brreg.ent.get(b) or {}).get("orgform"), n) for b, n in zip(df.buyer_id, df.buyer)]
+    # SSB KOSTRA-gruppe for kommunale oppdragsgivere (kommunenr fra forretningsadressen i Enhetsregisteret)
+    kostra_map, _ = kostra.load(settings.import_dir)
+    df["kostra_gruppe"] = [kostra_map.get(str((brreg.ent.get(b) or {}).get("kommunenr") or "")) if t == "Kommune" else None
+                           for b, t in zip(df.buyer_id, df.buyer_type)]
     df["peer_percentile"], df["peer_group"] = peer_rank(df, key, award)
     df["peer_tier"] = np.select([~award, df.peer_percentile >= 95, df.peer_percentile >= 80], ["Intensjon", "Høy", "Forhøyet"], "Lav")
     df["data_coverage"] = df[["num_bidders", "est_value", "award_value", "contract_months"]].notna().sum(axis=1)
@@ -320,7 +332,7 @@ def score_all(con, log=print) -> int:
     km = klagerisiko.load_model()
     df["klagerisiko"] = pct_rank(pd.Series(klagerisiko.predict(df, km), index=df.index)) if km else np.nan
 
-    cols = ["priority", "tier", "percentile", "peer_group", "peer_percentile", "peer_tier", "cri", "klagerisiko",
+    cols = ["priority", "tier", "percentile", "peer_group", "peer_percentile", "peer_tier", "kostra_gruppe", "cri", "klagerisiko",
             "repeat_pair_count", "prev_contract", "winner_market_share_pct", "award_over_estimate_pct", "data_coverage"]
     rows = []
     for i, r in df.iterrows():

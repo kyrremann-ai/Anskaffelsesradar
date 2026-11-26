@@ -7,10 +7,16 @@ import { useScope } from "../lib/scope";
 
 const tick = { fontSize: 11, fill: "var(--muted)" };
 
-function vs(mine: number | null | undefined, nat: number | null | undefined) {
+function diff(label: string, mine: number, other: number) {
+  const d = mine - other;
+  return <span>{label}: {pct(other)} <span style={{ color: d > 2 ? "var(--hi)" : d < -2 ? "var(--lo)" : undefined }}>({d > 0 ? "+" : ""}{d.toLocaleString("nb-NO", { maximumFractionDigits: 1 })} pp)</span></span>;
+}
+
+// Sammenligning med hele Norge, og med kommuner i samme KOSTRA-gruppe når valget har kommuner
+function vs(mine: number | null | undefined, nat: number | null | undefined, kostra?: number | null, grupper?: number[]) {
   if (mine == null || nat == null) return null;
-  const d = mine - nat;
-  return <span>Norge: {pct(nat)} <span style={{ color: d > 2 ? "var(--hi)" : d < -2 ? "var(--lo)" : undefined }}>({d > 0 ? "+" : ""}{d.toLocaleString("nb-NO", { maximumFractionDigits: 1 })} pp)</span></span>;
+  const k = kostra != null && grupper?.length ? diff(`KOSTRA-gruppe ${grupper.join(", ")}`, mine, kostra) : null;
+  return <>{diff("Norge", mine, nat)}{k && <><br />{k}</>}</>;
 }
 
 export default function Overview() {
@@ -30,15 +36,15 @@ export default function Overview() {
   return (
     <div>
       <PageHead title={sel.length ? "Oversikt for dine enheter" : "Oversikt"}
-        desc={`${int(s.n)} tildelte kontrakter fra ${int(s.n_buyers)} oppdragsgivere, ${date(s.period[0])} til ${date(s.period[1])}.${sel.length ? " Tallene sammenlignes med hele Norge." : " Velg «Mine enheter» øverst for å se bare dine kommuner og foretak."}`}
+        desc={`${int(s.n)} tildelte kontrakter fra ${int(s.n_buyers)} oppdragsgivere, ${date(s.period[0])} til ${date(s.period[1])}.${sel.length ? ` Tallene sammenlignes med hele Norge${s.kostra ? ` og med ${int(s.kostra.n_kommuner)} kommuner i samme KOSTRA-gruppe (SSB 2024)` : ""}.` : " Velg «Mine enheter» øverst for å se bare dine kommuner og foretak."}`}
         right={<Link to="/arbeid" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent px-3.5 text-sm font-medium text-surface transition-colors duration-150 hover:bg-[color-mix(in_srgb,var(--accent)_88%,black)]">Åpne arbeidsflaten <Icon name="arrow" /></Link>} />
 
       <KpiRow>
         <Kpi to="/arbeid" label="Kontrakter" value={int(s.n)} sub={sources} />
         <Kpi to="/arbeid?tier=Høy" label="Høy prioritet" value={int(s.n_high)} sub="Topp 5 % nasjonalt (rangering, ikke sannsynlighet)" />
         <Kpi to="/arbeid?tier=Forhøyet" label="Forhøyet" value={int(s.n_elevated)} sub="Persentil 80–95" />
-        <Kpi to="/arbeid?flag=single_bid" label="Ett registrert tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med oppgitt antall tilbud" compare={vs(s.single_bid_pct, s.national?.single_bid_pct)} />
-        <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Andel av kontraktene" compare={vs(s.direct_pct, s.national?.direct_pct)} />
+        <Kpi to="/arbeid?flag=single_bid" label="Ett registrert tilbud" value={pct(s.single_bid_pct)} sub="Av kontrakter med oppgitt antall tilbud" compare={vs(s.single_bid_pct, s.national?.single_bid_pct, s.kostra?.single_bid_pct, s.kostra?.grupper)} />
+        <Kpi to={`/arbeid?method=${encodeURIComponent("Direkte tildeling")}`} label="Direkte tildelinger" value={pct(s.direct_pct)} sub="Andel av kontraktene" compare={vs(s.direct_pct, s.national?.direct_pct, s.kostra?.direct_pct, s.kostra?.grupper)} />
         <Kpi to="/arbeid?sak=apne" label="Åpne saker" value={int(open)} sub="Saker som ikke er avsluttet" />
       </KpiRow>
       <p className="mt-2.5 max-w-[120ch] text-xs leading-relaxed text-muted">
