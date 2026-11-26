@@ -144,7 +144,7 @@ def row_out(r: pd.Series, full: bool = False) -> dict:
     keys = ["id", "title", "pub_date", "buyer_id", "buyer", "region", "sector", "method", "num_bidders", "est_value",
             "award_value", "award_over_estimate_pct", "priority", "tier", "percentile", "cri", "klagerisiko",
             "winner_names", "winner_ids", "flags", "data_coverage", "framework", "case_status", "source",
-            "notice_type", "regler", "peer_group", "peer_percentile", "peer_tier"]
+            "notice_type", "regler", "peer_group", "peer_percentile", "peer_tier", "kostra_gruppe"]
     if full:
         keys += ["url", "cpv", "nature", "accelerated", "justification", "tender_duration_days", "contract_months",
                  "winner_size", "repeat_pair_count", "prev_contract", "winner_market_share_pct", "case_id", "fetched_at",
@@ -208,7 +208,11 @@ def summary(buyers: str | None = None):
     intents = intents[intents.notice_type == "intensjon"]
     all_ = all_[all_.notice_type == "tildeling"]  # tellingene gjelder kontrakter; intensjoner vises for seg
     df = scope(all_, buyers)
+    # Lignende kommuner: alle kommuner i de samme KOSTRA-gruppene som de valgte kommunene
+    kg = sorted({int(g) for g in df.get("kostra_gruppe", pd.Series(dtype=float)).dropna()}) if buyers else []
+    peers = all_[all_.kostra_gruppe.isin(kg)] if kg else None
     out = _stats(df) | {"national": _stats(all_) if buyers else None, "n_buyers": int(df.buyer_id.nunique()),
+                        "kostra": _stats(peers) | {"grupper": kg, "n_kommuner": int(peers.buyer_id.nunique())} if kg else None,
                         "period": [df.pub_date.min(), df.pub_date.max()] if len(df) else [None, None]}
     m = df.assign(month=df.pub_date.str[:7], flagged=df.tier.isin(["Høy", "Forhøyet"]),
                   direct=df.method.eq("Direkte tildeling"))

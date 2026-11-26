@@ -252,8 +252,12 @@ function summary(rows: Row[], buyers: string | null) {
   const caseCounts: Record<string, number> = {};
   for (const r of d) { const s = caseStatus(r); if (s) caseCounts[s] = (caseCounts[s] ?? 0) + 1; }
   const dates = d.map((r) => r.pub_date).filter(Boolean).sort();
+  // Lignende kommuner: alle kommuner i de samme KOSTRA-gruppene som de valgte kommunene
+  const kg = buyers ? [...new Set(d.map((r) => r.kostra_gruppe).filter((g): g is number => g != null))].sort((a, b) => a - b) : [];
+  const peers = all.filter((r) => r.kostra_gruppe != null && kg.includes(r.kostra_gruppe));
   return {
     ...stats(d), national: buyers ? stats(all) : null, n_buyers: new Set(d.map((r) => r.buyer_id)).size,
+    kostra: kg.length ? { ...stats(peers), grupper: kg, n_kommuner: new Set(peers.map((r) => r.buyer_id)).size } : null,
     period: [dates[0] ?? null, dates[dates.length - 1] ?? null],
     monthly: [...months.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, g]) => ({
       month, n: g.length, flagged: g.filter((r) => r.tier !== "Lav").length, direct: g.filter((r) => r.method === "Direkte tildeling").length })),

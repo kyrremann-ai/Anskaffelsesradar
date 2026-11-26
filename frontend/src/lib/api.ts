@@ -30,6 +30,8 @@ export type ContractRow = {
   notice_type: "tildeling" | "intensjon"; regler: Check[];
   // Rangering innen oppdragsgivertype × sektor
   peer_group: string | null; peer_percentile: number | null; peer_tier: Tier;
+  // SSB KOSTRA-gruppe for kommunale oppdragsgivere (null for andre)
+  kostra_gruppe?: number | null;
 };
 // Hva én rad er, og hvor mange kunngjøringer som er slått sammen (fra observasjon.link)
 export type Observasjonsenhet = {
@@ -98,6 +100,8 @@ export type Group = {
 };
 export type Summary = Stats & {
   loading?: boolean; national: Stats | null; n_buyers: number; period: [string, string];
+  // Kommuner i samme KOSTRA-gruppe(r) som de valgte kommunene
+  kostra?: (Stats & { grupper: number[]; n_kommuner: number }) | null;
   monthly: { month: string; n: number; flagged: number; direct: number }[];
   flag_counts: { key: string; label: string; n: number; source?: string }[]; by_sector: Group[]; by_region: Group[];
   by_buyer: Group[]; cases: Record<string, number>;

@@ -220,7 +220,7 @@ def connect(path: Path) -> sqlite3.Connection:
         con.execute("ALTER TABLE politicians DROP COLUMN parti")
         con.commit()
         con.execute("VACUUM")  # så de slettede verdiene ikke blir liggende i ledige sider
-    for c, t in (("peer_group", "TEXT"), ("peer_percentile", "REAL"), ("peer_tier", "TEXT")):  # sammenligningsgruppe, fra v2.5
+    for c, t in (("peer_group", "TEXT"), ("peer_percentile", "REAL"), ("peer_tier", "TEXT"), ("kostra_gruppe", "INTEGER")):  # sammenligningsgruppe, fra v2.5
         if c not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:
             con.execute(f"ALTER TABLE scores ADD COLUMN {c} {t}")
     if "regler" not in {r[1] for r in con.execute("PRAGMA table_info(scores)")}:  # faste kontrollpunkter, fra v2.5
