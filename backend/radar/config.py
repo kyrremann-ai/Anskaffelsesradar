@@ -47,6 +47,7 @@ class Settings:
     proff_base_url: str = field(default_factory=lambda: _env("PROFF_BASE_URL", "https://api.proff.no"))
     proff_auth_scheme: str = field(default_factory=lambda: _env("PROFF_AUTH_SCHEME", "Token"))
     renhold_register_url: str = field(default_factory=lambda: _env("RENHOLD_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/renhold_register.xml"))
+    bht_register_url: str = field(default_factory=lambda: _env("BHT_REGISTER_URL", "https://registerdata.arbeidstilsynet.no/bht_register.xml"))
     bemanning_register_url: str = field(default_factory=lambda: _env("BEMANNING_REGISTER_URL"))  # API-et svarer 403 uten nøkkel (okt. 2026)
     # OpenSanctions er CC BY-NC: all bruk i kommersiell virksomhet krever lisens, også compliance-screening. Av som standard.
     opensanctions_url: str = field(default_factory=lambda: _env("OPENSANCTIONS_URL"))

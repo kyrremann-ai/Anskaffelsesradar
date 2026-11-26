@@ -155,6 +155,8 @@ def live_sources(con) -> dict:
             if s.proff_api_key else None, src)
     _source("Renholdsregisteret", lambda: registers.refresh(con, "renhold", s.renhold_register_url, log=_log)
             if s.renhold_register_url else None, src, prev=prev)
+    _source("BHT-registeret", lambda: registers.refresh(con, "bht", s.bht_register_url, log=_log)
+            if s.bht_register_url else None, src, prev=prev)
     _source("Bemanningsregisteret", lambda: registers.refresh(con, "bemanning", s.bemanning_register_url, log=_log)
             if s.bemanning_register_url else None, src, prev=prev)
     _source("Kandidatlister (valg.no)", lambda: valg.refresh(con, log=_log) if s.valg else None, src, prev=prev)

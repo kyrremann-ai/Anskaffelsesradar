@@ -337,3 +337,9 @@ def test_regnskap_5xx_is_unknown_not_missing():
         assert regnskap.fetch_one(c, "111111111", pause=0) == ({"orgnr": "111111111"}, [])
         assert regnskap.fetch_one(c, "222222222", pause=0) is None
     assert calls["n"] == 3
+
+
+def test_bht_register_underenheter_arver_status():
+    rows = {r["orgnr"]: r["status"] for r in registers.parse((FX / "bht.xml").read_bytes())}
+    assert rows == {"944357866": "Godkjent", "916708556": "Godkjent", "971475560": "Ikke godkjent"}
+    assert registers.CPV_PREFIX["bht"] == ("85147",)

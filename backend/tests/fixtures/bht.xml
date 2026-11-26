@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Register>
+  <Registernavn>BHT</Registernavn>
+  <Virksomhet>
+    <Hovedenhet>
+      <Organisasjonsnummer>944357866</Organisasjonsnummer>
+      <Navn>BEDRIFTSHELSEN AS</Navn>
+      <Godkjenningsstatus>Godkjent</Godkjenningsstatus>
+    </Hovedenhet>
+    <Underenheter>
+      <Avdeling Avgrensning="VedGodkjenning">
+        <Organisasjonsnummer>916708556</Organisasjonsnummer>
+        <Navn>BEDRIFTSHELSEN HERØYA</Navn>
+      </Avdeling>
+    </Underenheter>
+  </Virksomhet>
+  <Virksomhet>
+    <Hovedenhet>
+      <Organisasjonsnummer>971475560</Organisasjonsnummer>
+      <Navn>BHT-GRUPPEN SA</Navn>
+      <Godkjenningsstatus>Ikke godkjent</Godkjenningsstatus>
+    </Hovedenhet>
+  </Virksomhet>
+</Register>
