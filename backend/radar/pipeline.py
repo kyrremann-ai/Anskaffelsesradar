@@ -204,6 +204,8 @@ def run(con, demo: bool | None = None) -> None:
             # Prosedyre-ID og konkurransekunngjøringer gir forløp og frister; feil her stopper ikke resten
             _source("TED forløp og frister", lambda: (ted.backfill_procedures(con, log=_log),
                                                       ted.competitions(con, _two_years_before(settings.ted_from), log=_log))[1], sources)
+            # Endringskunngjøringer: få kunngjøringer, ett kall. Vises som kontrollpunkt, teller ikke i prioriteten.
+            _source("TED endringer", lambda: ted.modifications(con, settings.ted_from, log=_log), sources)
             with db.tx(con):
                 db.set_meta(con, "mode", "live")
         link(con, log=_log)

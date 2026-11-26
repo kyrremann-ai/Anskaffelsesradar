@@ -352,3 +352,54 @@ def refresh(con, data_dir: Path, since: str, log=print) -> list[dict]:
         if row := row or parse_fields(n):
             rows.append(row)
     return rows
+
+
+# ------------------------------------------------------------------ endringskunngjøringer
+# eForms «modification-justification» (FOA § 28-1 / LOA-forskriftene). Teksten sier hva oppdragsgiveren oppga, ikke om det holder.
+MODIFICATION_REASONS = {
+    "add-wss": "tilleggsytelser fra samme leverandør",
+    "mod-cir": "uforutsette omstendigheter",
+    "mod-minv": "endring under verdigrensen",
+    "mod-nons": "ikke vesentlig endring",
+    "mod-repl": "ny leverandør overtar kontrakten",
+    "mod-rev": "endringsklausul i kontrakten",
+    "other": "annen begrunnelse",
+}
+
+
+def parse_modification(n: dict) -> dict | None:
+    pub = n.get("publication-number")
+    if not pub:
+        return None
+    value = _f(_first(n.get("result-value-notice")))
+    if (_first(n.get("result-value-cur-notice")) or "NOK") != "NOK":
+        value = None
+    desc = _first(n.get("modification-description")) or _first(n.get("modification-reason-description"))
+    return {"publication_number": pub, "pub_date": str(n.get("publication-date") or "")[:10] or None,
+            "procedure_id": _first(n.get("procedure-identifier")),
+            "previous_notice": _first(n.get("modification-previous-notice-identifier")) or _first(n.get("BT-1501(n)-Contract")),
+            "justification": _first(n.get("modification-justification")), "new_value": value,
+            "description": (desc or "")[:1500] or None}
+
+
+def modifications(con, since: str, log=print) -> int:
+    """Norske endringskunngjøringer (can-modif) siden `since`. Få kunngjøringer, så alt hentes på nytt hver gang."""
+    body = {"query": f"buyer-country=NOR AND notice-type=can-modif AND publication-date>={since[:10].replace('-', '')}",
+            "fields": ["publication-number", "publication-date", "procedure-identifier", "modification-justification",
+                       "modification-previous-notice-identifier", "BT-1501(n)-Contract", "modification-description",
+                       "modification-reason-description", "result-value-notice", "result-value-cur-notice"],
+            "limit": 250, "paginationMode": "ITERATION", "scope": "ALL"}
+    rows = []
+    with httpx.Client(headers={"User-Agent": "Anskaffelsesradar/2.0"}) as client:
+        while True:
+            j = _post(client, body).json()
+            rows += [m for n in j.get("notices", []) if (m := parse_modification(n))]
+            if not j.get("iterationNextToken") or not j.get("notices"):
+                break
+            body["iterationNextToken"] = j["iterationNextToken"]
+    with tx(con):
+        con.execute("DELETE FROM contract_changes")
+        con.executemany("INSERT OR REPLACE INTO contract_changes VALUES (:publication_number, :pub_date, :procedure_id, "
+                        ":previous_notice, :justification, :new_value, :description)", rows)
+    log(f"TED: {len(rows)} endringskunngjøringer")
+    return len(rows)

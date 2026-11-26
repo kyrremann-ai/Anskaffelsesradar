@@ -84,6 +84,9 @@ export default function Method() {
             <li><b>Frist under lovens minstefrist:</b> under 30 dager fra konkurransekunngjøringen ble sendt til TED til tilbudsfristen eller fristen for forespørsel
               om deltakelse (15 dager ved oppgitt hastebehov). Gjelder åpen og begrenset anbudskonkurranse, konkurranse med forhandling og konkurransepreget dialog.
               Fristen kan lovlig kortes ned ved forhåndskunngjøring, som ikke er sjekket.</li>
+            <li><b>Endringskunngjøring etter tildeling:</b> oppdragsgiver har kunngjort en endring av kontrakten i TED eller Doffin.
+              Saksmappen viser begrunnelsen oppdragsgiver oppga (for eksempel tilleggsytelser eller uforutsette omstendigheter) og ny verdi når den er oppgitt.
+              Endringer kan være lovlige (FOA § 28-1). Kontrollpunktet teller ikke i prioriteten.</li>
           </ul>
         </Card>
       </div>
